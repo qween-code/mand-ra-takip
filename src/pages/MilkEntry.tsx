@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Save, Plus, Minus, History, Check, Search, Sun, Moon, Edit3, X, Activity, Calendar, FileText, Filter, UserPlus } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { Cow, Calf } from '../types';
+import type { Cow, Calf } from '../types';
 import { getTodayCows, saveMilkRecord, getCalves, updateCalfConsumption, addCowDB, addCalfDB, getCowHistory } from '../services/db';
 
 // --- MODALS ---
@@ -10,8 +10,11 @@ const CowDetailModal: React.FC<{ cow: Cow; onClose: () => void }> = ({ cow, onCl
     const [historyData, setHistoryData] = useState<any[]>([]);
 
     useEffect(() => {
-        const data = getCowHistory(cow.id);
-        setHistoryData(data);
+        const loadHistory = async () => {
+            const data = await getCowHistory(cow.id);
+            setHistoryData(data);
+        };
+        loadHistory();
     }, [cow.id]);
 
     // Calculate dynamic "Last Milking" status
@@ -299,10 +302,13 @@ const MilkEntry: React.FC = () => {
 
     // Load Data
     useEffect(() => {
-        const loadedCows = getTodayCows();
-        setCows(loadedCows);
-        const loadedCalves = getCalves();
-        setCalves(loadedCalves);
+        const loadData = async () => {
+            const loadedCows = await getTodayCows();
+            setCows(loadedCows);
+            const loadedCalves = await getCalves();
+            setCalves(loadedCalves);
+        };
+        loadData();
     }, [refreshTrigger]);
 
     const handleMilkChange = (id: string, session: 'morning' | 'evening', value: string) => {
@@ -680,8 +686,8 @@ const MilkEntry: React.FC = () => {
                             onClick={handleSaveAll}
                             disabled={isSaved}
                             className={`w-full py-4 rounded-xl font-bold text-white shadow-lg transition-all transform active:scale-[0.98] flex items-center justify-center space-x-2 ${isSaved
-                                    ? 'bg-green-500 shadow-green-200 cursor-default'
-                                    : 'bg-slate-900 hover:bg-slate-800 shadow-slate-200'
+                                ? 'bg-green-500 shadow-green-200 cursor-default'
+                                : 'bg-slate-900 hover:bg-slate-800 shadow-slate-200'
                                 }`}
                         >
                             {isSaved ? (
@@ -709,8 +715,8 @@ const MilkEntry: React.FC = () => {
                         onClick={handleSaveAll}
                         disabled={isSaved}
                         className={`flex-1 py-3.5 rounded-xl font-bold text-white shadow-lg transition-all active:scale-[0.98] flex items-center justify-center space-x-2 ${isSaved
-                                ? 'bg-green-500 shadow-green-200'
-                                : 'bg-slate-900 shadow-slate-200'
+                            ? 'bg-green-500 shadow-green-200'
+                            : 'bg-slate-900 shadow-slate-200'
                             }`}
                     >
                         {isSaved ? (

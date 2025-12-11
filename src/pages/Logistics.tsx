@@ -350,8 +350,8 @@ const Logistics = () => {
                                                         <button
                                                             onClick={() => handleCollectionChange(collection.farmerId, 'qualityOk', !collection.qualityOk)}
                                                             className={`px-3 py-1 rounded-full text-xs font-medium ${collection.qualityOk
-                                                                    ? 'bg-green-100 text-green-800'
-                                                                    : 'bg-red-100 text-red-800'
+                                                                ? 'bg-green-100 text-green-800'
+                                                                : 'bg-red-100 text-red-800'
                                                                 }`}
                                                         >
                                                             {collection.qualityOk ? 'Uygun' : 'Red'}

@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { Cow, Calf } from '../types';
+import type { Cow, Calf } from '../types';
 
 export const getTodayCows = async (): Promise<Cow[]> => {
     const today = new Date().toISOString().split('T')[0];
@@ -154,8 +154,9 @@ export const updateCalfConsumption = async (id: string, delta: number) => {
 };
 
 export const addCowDB = async (cow: Partial<Cow>) => {
+    if (!cow.tagNumber) return;
     await supabase.from('animals').insert({
-        name: cow.name,
+        name: cow.name || null,
         tag_number: cow.tagNumber,
         type: 'cow',
         status: 'active',
@@ -171,23 +172,26 @@ export const addCalfDB = async (calf: Partial<Calf>) => {
         motherId = mother?.id;
     }
 
+    if (!calf.name) return;
+
     await supabase.from('animals').insert({
         name: calf.name,
         type: 'calf',
         status: 'active',
         mother_id: motherId,
+        tag_number: `C-${Date.now().toString().slice(-4)}`, // Generate a temp tag number for calf as it is required
         target_consumption: calf.targetConsumption,
         birth_date: new Date(new Date().setMonth(new Date().getMonth() - (calf.ageMonths || 0))).toISOString()
     });
 };
 
-export const getCowHistory = async (id: string) => {
-    const { data } = await supabase
-        .from('milk_records')
-        .select('date, shift, quantity_liters')
-        .eq('animal_id', id)
-        .order('date', { ascending: false })
-        .limit(14); // Last 7 days (2 shifts per day)
+export const getCowHistory = async (_id: string) => {
+    // const { data } = await supabase
+    //     .from('milk_records')
+    //     .select('date, shift, quantity_liters')
+    //     .eq('animal_id', id)
+    //     .order('date', { ascending: false })
+    //     .limit(14); // Last 7 days (2 shifts per day)
 
     // Process data to match chart format { day: 'Pzt', morning: 10, evening: 12 }
     // This is a simplified mock return for now as processing logic is complex
