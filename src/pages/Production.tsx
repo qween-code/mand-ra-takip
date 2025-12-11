@@ -1,38 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import {
-    Plus,
-    Play,
-    CheckCircle,
-    Loader2,
-    Package
-} from 'lucide-react';
+import type { Database } from '../types/supabase';
+import { Card, Button, Input, Select, Modal, StatusBadge } from '../components/ui';
+import { Factory, Plus, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { clsx } from 'clsx';
-
-import type { Database } from '../types/supabase';
 
 type ProductionBatch = Database['public']['Tables']['production_batches']['Row'];
 
 const Production: React.FC = () => {
     const [batches, setBatches] = useState<ProductionBatch[]>([]);
     const [loading, setLoading] = useState(true);
-    const [showNewBatchForm, setShowNewBatchForm] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [filterStatus, setFilterStatus] = useState('');
 
-    // Form State
-    const [productType, setProductType] = useState('Yoğurt');
-    const [milkUsed, setMilkUsed] = useState('');
-    const [batchNumber, setBatchNumber] = useState('');
+    // Form state
+    const [formData, setFormData] = useState({
+        product_type: '',
+        milk_used_liters: '',
+        start_time: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+    });
 
     useEffect(() => {
         fetchBatches();
     }, []);
 
     const fetchBatches = async () => {
+        setLoading(true);
         try {
-            setLoading(true);
             const { data, error } = await supabase
                 .from('production_batches')
                 .select('*')
@@ -42,48 +38,48 @@ const Production: React.FC = () => {
             setBatches(data || []);
         } catch (error) {
             console.error('Error fetching batches:', error);
-            alert('Üretim verileri yüklenirken hata oluştu.');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleStartBatch = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!milkUsed || !batchNumber) return;
+    const generateBatchNumber = () => {
+        const date = format(new Date(), 'yyyyMMdd');
+        const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+        return `B${date}-${random}`;
+    };
 
+    const handleAddBatch = async (e: React.FormEvent) => {
+        e.preventDefault();
         try {
-            setSubmitting(true);
-            const { error } = await supabase.from('production_batches').insert([
-                {
-                    batch_number: batchNumber,
-                    product_type: productType,
-                    milk_used_liters: parseFloat(milkUsed),
-                    start_time: new Date().toISOString(),
-                    status: 'in_progress',
-                },
-            ]);
+            const { error } = await supabase.from('production_batches').insert([{
+                batch_number: generateBatchNumber(),
+                product_type: formData.product_type,
+                milk_used_liters: parseFloat(formData.milk_used_liters),
+                start_time: formData.start_time,
+                status: 'in_progress',
+            }]);
 
             if (error) throw error;
 
-            setShowNewBatchForm(false);
-            setBatchNumber('');
-            setMilkUsed('');
+            setShowAddModal(false);
+            setFormData({
+                product_type: '',
+                milk_used_liters: '',
+                start_time: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+            });
             fetchBatches();
-            alert('Üretim başlatıldı!');
         } catch (error) {
-            console.error('Error starting batch:', error);
-            alert('Üretim başlatılırken hata oluştu.');
-        } finally {
-            setSubmitting(false);
+            console.error('Error creating batch:', error);
+            alert('Parti oluşturulurken bir hata oluştu');
         }
     };
 
-    const handleCompleteBatch = async (id: string) => {
-        const outputQty = prompt('Üretilen Miktar:');
-        if (!outputQty) return;
+    const handleCompleteBatch = async (batch: ProductionBatch) => {
+        const quantity = prompt('Üretilen miktar:');
+        const unit = prompt('Birim (Adet, Kg, Teneke):');
 
-        const outputUnit = prompt('Birim (Adet, Kg, Teneke):', 'Adet');
+        if (!quantity || !unit) return;
 
         try {
             const { error } = await supabase
@@ -91,199 +87,192 @@ const Production: React.FC = () => {
                 .update({
                     status: 'completed',
                     end_time: new Date().toISOString(),
-                    output_quantity: parseFloat(outputQty),
-                    output_unit: outputUnit,
+                    output_quantity: parseFloat(quantity),
+                    output_unit: unit,
                 })
-                .eq('id', id);
+                .eq('id', batch.id);
 
             if (error) throw error;
             fetchBatches();
         } catch (error) {
             console.error('Error completing batch:', error);
-            alert('İşlem başarısız.');
         }
     };
 
-    const getStatusBadge = (status: string) => {
-        switch (status) {
-            case 'in_progress':
-                return <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">Üretimde</span>;
-            case 'completed':
-                return <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">Tamamlandı</span>;
-            case 'failed':
-                return <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">Hatalı</span>;
-            default:
-                return <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800">Planlandı</span>;
-        }
+    const filteredBatches = batches.filter(batch => {
+        return !filterStatus || batch.status === filterStatus;
+    });
+
+    const productTypes = [
+        { value: 'yogurt', label: 'Yoğurt' },
+        { value: 'cheese', label: 'Peynir' },
+        { value: 'butter', label: 'Tereyağı' },
+        { value: 'cream', label: 'Krema' },
+        { value: 'ayran', label: 'Ayran' },
+    ];
+
+    const getProductTypeLabel = (type: string) => {
+        const found = productTypes.find(p => p.value === type);
+        return found ? found.label : type;
     };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="animate-spin rounded-full h-12 w-12 border-2 border-indigo-600 border-t-transparent" />
+            </div>
+        );
+    }
 
     return (
-        <div className="space-y-6">
-            <div className="md:flex md:items-center md:justify-between">
-                <div className="min-w-0 flex-1">
-                    <h2 className="text-2xl font-bold leading-7 text-slate-900 sm:truncate sm:text-3xl sm:tracking-tight">
-                        Üretim Yönetimi (MES)
-                    </h2>
-                    <p className="mt-1 text-sm text-slate-500">
-                        Üretim partilerini takip edin ve yönetin.
-                    </p>
+        <div className="space-y-8">
+            {/* Page Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900">Üretim</h1>
+                    <p className="text-gray-500 mt-1">Süt ürünleri üretim takibi</p>
                 </div>
-                <div className="mt-4 flex md:ml-4 md:mt-0">
-                    <button
-                        type="button"
-                        onClick={() => setShowNewBatchForm(!showNewBatchForm)}
-                        className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-                    >
-                        <Plus className="-ml-0.5 mr-1.5 h-5 w-5" aria-hidden="true" />
-                        Yeni Parti Başlat
-                    </button>
-                </div>
+                <Button onClick={() => setShowAddModal(true)}>
+                    <Plus size={20} className="mr-2" />
+                    Yeni Parti
+                </Button>
             </div>
 
-            {/* New Batch Form */}
-            {showNewBatchForm && (
-                <div className="bg-white shadow sm:rounded-lg p-6 border border-indigo-100">
-                    <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">Yeni Üretim Partisi</h3>
-                    <form onSubmit={handleStartBatch} className="grid grid-cols-1 gap-y-6 sm:grid-cols-2 sm:gap-x-8">
-                        <div>
-                            <label htmlFor="batchNumber" className="block text-sm font-medium text-gray-700">Parti No (Batch ID)</label>
-                            <div className="mt-1">
-                                <input
-                                    type="text"
-                                    id="batchNumber"
-                                    required
-                                    value={batchNumber}
-                                    onChange={(e) => setBatchNumber(e.target.value)}
-                                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"
-                                    placeholder="örn: 2023-YO-001"
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label htmlFor="productType" className="block text-sm font-medium text-gray-700">Ürün Tipi</label>
-                            <div className="mt-1">
-                                <select
-                                    id="productType"
-                                    value={productType}
-                                    onChange={(e) => setProductType(e.target.value)}
-                                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"
-                                >
-                                    <option>Yoğurt</option>
-                                    <option>Beyaz Peynir</option>
-                                    <option>Kaşar Peyniri</option>
-                                    <option>Tereyağı</option>
-                                    <option>Ayran</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label htmlFor="milkUsed" className="block text-sm font-medium text-gray-700">Kullanılan Süt (Litre)</label>
-                            <div className="mt-1">
-                                <input
-                                    type="number"
-                                    id="milkUsed"
-                                    required
-                                    value={milkUsed}
-                                    onChange={(e) => setMilkUsed(e.target.value)}
-                                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="sm:col-span-2 flex justify-end space-x-3">
-                            <button
-                                type="button"
-                                onClick={() => setShowNewBatchForm(false)}
-                                className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
-                            >
-                                İptal
-                            </button>
-                            <button
-                                type="submit"
-                                disabled={submitting}
-                                className="inline-flex justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-                            >
-                                {submitting ? 'Başlatılıyor...' : 'Üretimi Başlat'}
-                            </button>
-                        </div>
-                    </form>
+            {/* Filter */}
+            <Card>
+                <div className="flex gap-4">
+                    <Select
+                        value={filterStatus}
+                        onChange={setFilterStatus}
+                        options={[
+                            { value: 'planned', label: 'Planlandı' },
+                            { value: 'in_progress', label: 'Devam Ediyor' },
+                            { value: 'completed', label: 'Tamamlandı' },
+                            { value: 'failed', label: 'Başarısız' },
+                        ]}
+                        placeholder="Tüm Durumlar"
+                    />
                 </div>
-            )}
+            </Card>
 
-            {/* Batches List */}
-            <div className="bg-white shadow sm:rounded-lg overflow-hidden">
-                <ul role="list" className="divide-y divide-gray-200">
-                    {loading ? (
-                        <div className="p-8 text-center text-gray-500">
-                            <Loader2 className="animate-spin h-8 w-8 mx-auto mb-2 text-indigo-500" />
-                            Yükleniyor...
-                        </div>
-                    ) : batches.length === 0 ? (
-                        <div className="p-12 text-center">
-                            <Package className="mx-auto h-12 w-12 text-gray-400" />
-                            <h3 className="mt-2 text-sm font-semibold text-gray-900">Üretim kaydı yok</h3>
-                            <p className="mt-1 text-sm text-gray-500">Yeni bir üretim partisi başlatarak başlayın.</p>
-                        </div>
-                    ) : (
-                        batches.map((batch) => (
-                            <li key={batch.id} className="hover:bg-gray-50 transition-colors">
-                                <div className="px-4 py-4 sm:px-6">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center">
-                                            <div className="flex-shrink-0">
-                                                <span className={clsx(
-                                                    "inline-flex h-10 w-10 items-center justify-center rounded-full",
-                                                    batch.status === 'completed' ? "bg-green-100" : "bg-blue-100"
-                                                )}>
-                                                    {batch.status === 'completed' ? (
-                                                        <CheckCircle className="h-6 w-6 text-green-600" />
-                                                    ) : (
-                                                        <Play className="h-6 w-6 text-blue-600" />
-                                                    )}
-                                                </span>
-                                            </div>
-                                            <div className="ml-4">
-                                                <div className="flex items-center">
-                                                    <h3 className="text-base font-semibold leading-6 text-gray-900 mr-2">
-                                                        {batch.product_type}
-                                                    </h3>
-                                                    {getStatusBadge(batch.status || '')}
-                                                </div>
-                                                <div className="mt-1 flex items-center text-sm text-gray-500">
-                                                    <span className="truncate">Parti: {batch.batch_number}</span>
-                                                    <span className="mx-2">•</span>
-                                                    <span>{batch.milk_used_liters} L Süt</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="flex flex-col items-end space-y-2">
-                                            <div className="text-sm text-gray-500">
-                                                {batch.start_time ? format(new Date(batch.start_time), 'd MMM HH:mm', { locale: tr }) : '-'}
-                                                {batch.end_time && ` - ${format(new Date(batch.end_time), 'HH:mm')}`}
-                                            </div>
-                                            {batch.status === 'in_progress' && (
-                                                <button
-                                                    onClick={() => handleCompleteBatch(batch.id)}
-                                                    className="inline-flex items-center rounded-md bg-white px-2.5 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
-                                                >
-                                                    Tamamla
-                                                </button>
-                                            )}
-                                            {batch.status === 'completed' && (
-                                                <span className="text-sm font-medium text-gray-900">
-                                                    Çıktı: {batch.output_quantity} {batch.output_unit}
-                                                </span>
-                                            )}
-                                        </div>
+            {/* Batches Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredBatches.length === 0 ? (
+                    <div className="col-span-full text-center py-12 text-gray-500">
+                        Henüz üretim partisi yok
+                    </div>
+                ) : (
+                    filteredBatches.map((batch) => (
+                        <Card key={batch.id} className="hover:shadow-md transition-shadow">
+                            <div className="flex items-start justify-between mb-4">
+                                <div className="flex items-center gap-3">
+                                    <div className={clsx(
+                                        'w-12 h-12 rounded-xl flex items-center justify-center',
+                                        batch.status === 'completed' ? 'bg-green-100' :
+                                            batch.status === 'in_progress' ? 'bg-yellow-100' :
+                                                'bg-gray-100'
+                                    )}>
+                                        <Factory size={24} className={clsx(
+                                            batch.status === 'completed' ? 'text-green-600' :
+                                                batch.status === 'in_progress' ? 'text-yellow-600' :
+                                                    'text-gray-600'
+                                        )} />
+                                    </div>
+                                    <div>
+                                        <p className="font-semibold text-gray-900">{getProductTypeLabel(batch.product_type)}</p>
+                                        <p className="text-sm text-gray-500">{batch.batch_number}</p>
                                     </div>
                                 </div>
-                            </li>
-                        ))
-                    )}
-                </ul>
+                                <StatusBadge status={batch.status || 'planned'} />
+                            </div>
+
+                            <div className="space-y-2 text-sm">
+                                <div className="flex justify-between">
+                                    <span className="text-gray-500">Kullanılan Süt</span>
+                                    <span className="font-medium">{batch.milk_used_liters} L</span>
+                                </div>
+                                {batch.start_time && (
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-500">Başlangıç</span>
+                                        <span className="font-medium">
+                                            {format(new Date(batch.start_time), 'd MMM HH:mm', { locale: tr })}
+                                        </span>
+                                    </div>
+                                )}
+                                {batch.end_time && (
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-500">Bitiş</span>
+                                        <span className="font-medium">
+                                            {format(new Date(batch.end_time), 'd MMM HH:mm', { locale: tr })}
+                                        </span>
+                                    </div>
+                                )}
+                                {batch.output_quantity && (
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-500">Üretim</span>
+                                        <span className="font-semibold text-green-600">
+                                            {batch.output_quantity} {batch.output_unit}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {batch.status === 'in_progress' && (
+                                <div className="mt-4 pt-4 border-t border-gray-100">
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        className="w-full"
+                                        onClick={() => handleCompleteBatch(batch)}
+                                    >
+                                        <CheckCircle size={16} className="mr-2" />
+                                        Tamamla
+                                    </Button>
+                                </div>
+                            )}
+                        </Card>
+                    ))
+                )}
             </div>
+
+            {/* Add Modal */}
+            <Modal
+                isOpen={showAddModal}
+                onClose={() => setShowAddModal(false)}
+                title="Yeni Üretim Partisi"
+                size="md"
+                footer={
+                    <div className="flex justify-end gap-3">
+                        <Button variant="secondary" onClick={() => setShowAddModal(false)}>İptal</Button>
+                        <Button onClick={handleAddBatch}>Başlat</Button>
+                    </div>
+                }
+            >
+                <form className="space-y-4">
+                    <Select
+                        label="Ürün Tipi"
+                        value={formData.product_type}
+                        onChange={(value) => setFormData({ ...formData, product_type: value })}
+                        options={productTypes}
+                        placeholder="Ürün seçiniz"
+                    />
+                    <Input
+                        label="Kullanılacak Süt (Litre)"
+                        type="number"
+                        step="0.1"
+                        value={formData.milk_used_liters}
+                        onChange={(e) => setFormData({ ...formData, milk_used_liters: e.target.value })}
+                        placeholder="Örn: 100"
+                        required
+                    />
+                    <Input
+                        label="Başlangıç Zamanı"
+                        type="datetime-local"
+                        value={formData.start_time}
+                        onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
+                    />
+                </form>
+            </Modal>
         </div>
     );
 };

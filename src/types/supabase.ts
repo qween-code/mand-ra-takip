@@ -7,11 +7,6 @@ export type Json =
     | Json[]
 
 export type Database = {
-    // Allows to automatically instantiate createClient with right options
-    // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-    __InternalSupabase: {
-        PostgrestVersion: "13.0.5"
-    }
     public: {
         Tables: {
             animals: {
@@ -51,15 +46,7 @@ export type Database = {
                     tag_number?: string
                     type?: string
                 }
-                Relationships: [
-                    {
-                        foreignKeyName: "animals_mother_id_fkey"
-                        columns: ["mother_id"]
-                        isOneToOne: false
-                        referencedRelation: "animals"
-                        referencedColumns: ["id"]
-                    },
-                ]
+                Relationships: []
             }
             expenses: {
                 Row: {
@@ -94,87 +81,78 @@ export type Database = {
             feed_logs: {
                 Row: {
                     animal_id: string | null
-                    cost: number | null
                     created_at: string
                     date: string
                     feed_type: string
-                    group_id: string | null
                     id: string
+                    notes: string | null
                     quantity: number
+                    quantity_kg: number
+                    total_cost: number | null
+                    unit_cost: number
                 }
                 Insert: {
                     animal_id?: string | null
-                    cost?: number | null
                     created_at?: string
                     date?: string
                     feed_type: string
-                    group_id?: string | null
                     id?: string
-                    quantity: number
+                    notes?: string | null
+                    quantity?: number
+                    quantity_kg: number
+                    unit_cost: number
                 }
                 Update: {
                     animal_id?: string | null
-                    cost?: number | null
                     created_at?: string
                     date?: string
                     feed_type?: string
-                    group_id?: string | null
                     id?: string
+                    notes?: string | null
                     quantity?: number
+                    quantity_kg?: number
+                    unit_cost?: number
                 }
-                Relationships: [
-                    {
-                        foreignKeyName: "feed_logs_animal_id_fkey"
-                        columns: ["animal_id"]
-                        isOneToOne: false
-                        referencedRelation: "animals"
-                        referencedColumns: ["id"]
-                    },
-                ]
+                Relationships: []
             }
             health_records: {
                 Row: {
-                    animal_id: string | null
+                    animal_id: string
                     cost: number | null
                     created_at: string
                     date: string
                     description: string | null
                     id: string
-                    notes: string | null
-                    treatment_type: string
-                    veterinarian: string | null
+                    next_checkup_date: string | null
+                    performed_by: string | null
+                    record_type: string
+                    treatment_type: string | null
                 }
                 Insert: {
-                    animal_id?: string | null
+                    animal_id: string
                     cost?: number | null
                     created_at?: string
                     date?: string
                     description?: string | null
                     id?: string
-                    notes?: string | null
-                    treatment_type: string
-                    veterinarian?: string | null
+                    next_checkup_date?: string | null
+                    performed_by?: string | null
+                    record_type: string
+                    treatment_type?: string | null
                 }
                 Update: {
-                    animal_id?: string | null
+                    animal_id?: string
                     cost?: number | null
                     created_at?: string
                     date?: string
                     description?: string | null
                     id?: string
-                    notes?: string | null
-                    treatment_type?: string
-                    veterinarian?: string | null
+                    next_checkup_date?: string | null
+                    performed_by?: string | null
+                    record_type?: string
+                    treatment_type?: string | null
                 }
-                Relationships: [
-                    {
-                        foreignKeyName: "health_records_animal_id_fkey"
-                        columns: ["animal_id"]
-                        isOneToOne: false
-                        referencedRelation: "animals"
-                        referencedColumns: ["id"]
-                    },
-                ]
+                Relationships: []
             }
             milk_records: {
                 Row: {
@@ -210,131 +188,40 @@ export type Database = {
                     quantity_liters?: number
                     shift?: string
                 }
-                Relationships: [
-                    {
-                        foreignKeyName: "milk_records_animal_id_fkey"
-                        columns: ["animal_id"]
-                        isOneToOne: false
-                        referencedRelation: "animals"
-                        referencedColumns: ["id"]
-                    },
-                ]
+                Relationships: []
             }
             milk_usage: {
                 Row: {
-                    amount_liters: number
-                    batch_id: string | null
-                    calf_id: string | null
                     created_at: string
                     date: string
                     id: string
                     notes: string | null
+                    quantity_liters: number
+                    related_batch_id: string | null
+                    related_calf_id: string | null
                     usage_type: string
                 }
                 Insert: {
-                    amount_liters: number
-                    batch_id?: string | null
-                    calf_id?: string | null
                     created_at?: string
                     date?: string
                     id?: string
                     notes?: string | null
+                    quantity_liters: number
+                    related_batch_id?: string | null
+                    related_calf_id?: string | null
                     usage_type: string
                 }
                 Update: {
-                    amount_liters?: number
-                    batch_id?: string | null
-                    calf_id?: string | null
                     created_at?: string
                     date?: string
                     id?: string
                     notes?: string | null
+                    quantity_liters?: number
+                    related_batch_id?: string | null
+                    related_calf_id?: string | null
                     usage_type?: string
                 }
-                Relationships: [
-                    {
-                        foreignKeyName: "milk_usage_batch_id_fkey"
-                        columns: ["batch_id"]
-                        isOneToOne: false
-                        referencedRelation: "production_batches"
-                        referencedColumns: ["id"]
-                    },
-                    {
-                        foreignKeyName: "milk_usage_calf_id_fkey"
-                        columns: ["calf_id"]
-                        isOneToOne: false
-                        referencedRelation: "animals"
-                        referencedColumns: ["id"]
-                    },
-                ]
-            }
-            product_transfers: {
-                Row: {
-                    created_at: string
-                    id: string
-                    notes: string | null
-                    product_id: string | null
-                    quantity: number
-                    source_region_id: string | null
-                    status: string | null
-                    target_region_id: string | null
-                    target_sales_point_id: string | null
-                    transfer_date: string
-                }
-                Insert: {
-                    created_at?: string
-                    id?: string
-                    notes?: string | null
-                    product_id?: string | null
-                    quantity: number
-                    source_region_id?: string | null
-                    status?: string | null
-                    target_region_id?: string | null
-                    target_sales_point_id?: string | null
-                    transfer_date?: string
-                }
-                Update: {
-                    created_at?: string
-                    id?: string
-                    notes?: string | null
-                    product_id?: string | null
-                    quantity?: number
-                    source_region_id?: string | null
-                    status?: string | null
-                    target_region_id?: string | null
-                    target_sales_point_id?: string | null
-                    transfer_date?: string
-                }
-                Relationships: [
-                    {
-                        foreignKeyName: "product_transfers_product_id_fkey"
-                        columns: ["product_id"]
-                        isOneToOne: false
-                        referencedRelation: "products"
-                        referencedColumns: ["id"]
-                    },
-                    {
-                        foreignKeyName: "product_transfers_source_region_id_fkey"
-                        columns: ["source_region_id"]
-                        isOneToOne: false
-                        referencedRelation: "regions"
-                        referencedColumns: ["id"]
-                    },
-                    {
-                        foreignKeyName: "product_transfers_target_region_id_fkey"
-                        columns: ["target_region_id"]
-                        isOneToOne: false
-                        referencedRelation: "regions"
-                        referencedColumns: ["id"]
-                    },
-                    {
-                        foreignKeyName: "product_transfers_target_sales_point_id_fkey"
-                        columns: ["target_sales_point_id"]
-                        isOneToOne: false
-                        referencedRelation: "sales_points"
-                        referencedColumns: ["id"]
-                    },
-                ]
+                Relationships: []
             }
             production_batches: {
                 Row: {
@@ -343,11 +230,11 @@ export type Database = {
                     end_time: string | null
                     id: string
                     milk_used_liters: number
+                    output_quantity: number | null
+                    output_unit: string | null
                     product_type: string
                     start_time: string | null
                     status: string | null
-                    output_quantity: number | null
-                    output_unit: string | null
                 }
                 Insert: {
                     batch_number: string
@@ -355,11 +242,11 @@ export type Database = {
                     end_time?: string | null
                     id?: string
                     milk_used_liters: number
+                    output_quantity?: number | null
+                    output_unit?: string | null
                     product_type: string
                     start_time?: string | null
                     status?: string | null
-                    output_quantity?: number | null
-                    output_unit?: string | null
                 }
                 Update: {
                     batch_number?: string
@@ -367,11 +254,59 @@ export type Database = {
                     end_time?: string | null
                     id?: string
                     milk_used_liters?: number
+                    output_quantity?: number | null
+                    output_unit?: string | null
                     product_type?: string
                     start_time?: string | null
                     status?: string | null
-                    output_quantity?: number | null
-                    output_unit?: string | null
+                }
+                Relationships: []
+            }
+            product_transfers: {
+                Row: {
+                    created_at: string
+                    date: string
+                    driver_name: string | null
+                    id: string
+                    product_id: string
+                    quantity: number
+                    source_region_id: string | null
+                    source_type: string
+                    status: string | null
+                    target_region_id: string | null
+                    target_sales_point_id: string | null
+                    target_type: string
+                    vehicle_plate: string | null
+                }
+                Insert: {
+                    created_at?: string
+                    date?: string
+                    driver_name?: string | null
+                    id?: string
+                    product_id: string
+                    quantity: number
+                    source_region_id?: string | null
+                    source_type: string
+                    status?: string | null
+                    target_region_id?: string | null
+                    target_sales_point_id?: string | null
+                    target_type: string
+                    vehicle_plate?: string | null
+                }
+                Update: {
+                    created_at?: string
+                    date?: string
+                    driver_name?: string | null
+                    id?: string
+                    product_id?: string
+                    quantity?: number
+                    source_region_id?: string | null
+                    source_type?: string
+                    status?: string | null
+                    target_region_id?: string | null
+                    target_sales_point_id?: string | null
+                    target_type?: string
+                    vehicle_plate?: string | null
                 }
                 Relationships: []
             }
@@ -454,22 +389,7 @@ export type Database = {
                     sale_id?: string | null
                     status?: string | null
                 }
-                Relationships: [
-                    {
-                        foreignKeyName: "returns_product_id_fkey"
-                        columns: ["product_id"]
-                        isOneToOne: false
-                        referencedRelation: "products"
-                        referencedColumns: ["id"]
-                    },
-                    {
-                        foreignKeyName: "returns_sale_id_fkey"
-                        columns: ["sale_id"]
-                        isOneToOne: false
-                        referencedRelation: "sales"
-                        referencedColumns: ["id"]
-                    },
-                ]
+                Relationships: []
             }
             sales: {
                 Row: {
@@ -499,15 +419,7 @@ export type Database = {
                     sales_point_id?: string | null
                     total_amount?: number
                 }
-                Relationships: [
-                    {
-                        foreignKeyName: "sales_sales_point_id_fkey"
-                        columns: ["sales_point_id"]
-                        isOneToOne: false
-                        referencedRelation: "sales_points"
-                        referencedColumns: ["id"]
-                    },
-                ]
+                Relationships: []
             }
             sales_points: {
                 Row: {
@@ -534,15 +446,7 @@ export type Database = {
                     region_id?: string | null
                     type?: string | null
                 }
-                Relationships: [
-                    {
-                        foreignKeyName: "sales_points_region_id_fkey"
-                        columns: ["region_id"]
-                        isOneToOne: false
-                        referencedRelation: "regions"
-                        referencedColumns: ["id"]
-                    },
-                ]
+                Relationships: []
             }
         }
         Views: {
@@ -560,10 +464,7 @@ export type Database = {
     }
 }
 
-
-
+// Simplified helper types
 export type Tables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row']
-export type Enums<T extends keyof Database['public']['Enums']> = Database['public']['Enums'][T]
 export type TablesInsert<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Insert']
 export type TablesUpdate<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Update']
-
