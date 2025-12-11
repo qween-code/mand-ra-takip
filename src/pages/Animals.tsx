@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Database } from '../types/supabase';
-import { Plus, Search, Filter, MoreHorizontal } from 'lucide-react';
+import { Plus, Search, Filter, Activity, Syringe, Milk, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import { clsx } from 'clsx';
 
 type Animal = Database['public']['Tables']['animals']['Row'];
+type HealthRecord = Database['public']['Tables']['health_records']['Row'];
+type FeedLog = Database['public']['Tables']['feed_logs']['Row'];
+type MilkRecord = Database['public']['Tables']['milk_records']['Row'];
 
 const Animals = () => {
     const [animals, setAnimals] = useState<Animal[]>([]);
@@ -13,6 +17,16 @@ const Animals = () => {
     const [filterType, setFilterType] = useState<string>('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [showAddModal, setShowAddModal] = useState(false);
+
+    // Detail Modal State
+    const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
+    const [detailTab, setDetailTab] = useState<'health' | 'feed' | 'milk'>('health');
+    const [animalDetails, setAnimalDetails] = useState<{
+        health: HealthRecord[],
+        feed: FeedLog[],
+        milk: MilkRecord[]
+    }>({ health: [], feed: [], milk: [] });
+    const [loadingDetails, setLoadingDetails] = useState(false);
 
     // Form state
     const [newAnimal, setNewAnimal] = useState<Partial<Animal>>({
@@ -24,6 +38,12 @@ const Animals = () => {
     useEffect(() => {
         fetchAnimals();
     }, []);
+
+    useEffect(() => {
+        if (selectedAnimal) {
+            fetchAnimalDetails(selectedAnimal.id);
+        }
+    }, [selectedAnimal]);
 
     const fetchAnimals = async () => {
         try {
@@ -38,6 +58,27 @@ const Animals = () => {
             console.error('Error fetching animals:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchAnimalDetails = async (animalId: string) => {
+        setLoadingDetails(true);
+        try {
+            const [healthRes, feedRes, milkRes] = await Promise.all([
+                supabase.from('health_records').select('*').eq('animal_id', animalId).order('date', { ascending: false }),
+                supabase.from('feed_logs').select('*').eq('animal_id', animalId).order('date', { ascending: false }),
+                supabase.from('milk_records').select('*').eq('animal_id', animalId).order('date', { ascending: false })
+            ]);
+
+            setAnimalDetails({
+                health: healthRes.data || [],
+                feed: feedRes.data || [],
+                milk: milkRes.data || []
+            });
+        } catch (error) {
+            console.error('Error fetching details:', error);
+        } finally {
+            setLoadingDetails(false);
         }
     };
 
@@ -131,7 +172,7 @@ const Animals = () => {
                             </tr>
                         ) : (
                             filteredAnimals.map((animal) => (
-                                <tr key={animal.id} className="hover:bg-gray-50">
+                                <tr key={animal.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedAnimal(animal)}>
                                     <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{animal.tag_number}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-gray-500">{animal.name || '-'}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-gray-500">
@@ -154,9 +195,11 @@ const Animals = () => {
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                        <button className="text-indigo-600 hover:text-indigo-900 mr-3">Detay</button>
-                                        <button className="text-gray-400 hover:text-gray-600">
-                                            <MoreHorizontal size={20} />
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); setSelectedAnimal(animal); }}
+                                            className="text-indigo-600 hover:text-indigo-900 mr-3"
+                                        >
+                                            Detay
                                         </button>
                                     </td>
                                 </tr>
@@ -241,6 +284,173 @@ const Animals = () => {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Animal Detail Modal */}
+            {selectedAnimal && (
+                <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50 overflow-y-auto py-4">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full mx-4 flex flex-col max-h-[90vh]">
+                        {/* Header */}
+                        <div className="p-6 border-b border-gray-200 flex justify-between items-start bg-gray-50 rounded-t-xl">
+                            <div>
+                                <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                                    {selectedAnimal.tag_number}
+                                    <span className="text-sm font-normal text-gray-500 bg-white px-2 py-1 rounded border border-gray-200">
+                                        {selectedAnimal.type === 'cow' ? 'İnek' : selectedAnimal.type === 'calf' ? 'Buzağı' : 'Boğa'}
+                                    </span>
+                                </h2>
+                                <p className="text-gray-500 mt-1">{selectedAnimal.name || 'İsimsiz'}</p>
+                            </div>
+                            <button
+                                onClick={() => setSelectedAnimal(null)}
+                                className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-200 transition-colors"
+                            >
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        {/* Tabs */}
+                        <div className="border-b border-gray-200 px-6">
+                            <nav className="-mb-px flex space-x-8">
+                                {[
+                                    { id: 'health', name: 'Sağlık Kayıtları', icon: Activity },
+                                    { id: 'feed', name: 'Yem Tüketimi', icon: Syringe }, // Using Syringe as placeholder for Feed if needed, or maybe something else
+                                    { id: 'milk', name: 'Süt Verimi', icon: Milk },
+                                ].map((tab) => (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => setDetailTab(tab.id as any)}
+                                        className={clsx(
+                                            detailTab === tab.id
+                                                ? 'border-indigo-500 text-indigo-600'
+                                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
+                                            'group inline-flex items-center py-4 px-1 border-b-2 font-medium text-sm'
+                                        )}
+                                    >
+                                        <tab.icon className={clsx(
+                                            detailTab === tab.id ? 'text-indigo-500' : 'text-gray-400 group-hover:text-gray-500',
+                                            '-ml-0.5 mr-2 h-5 w-5'
+                                        )} />
+                                        {tab.name}
+                                    </button>
+                                ))}
+                            </nav>
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-6 overflow-y-auto flex-1">
+                            {loadingDetails ? (
+                                <div className="flex justify-center py-12">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                                </div>
+                            ) : (
+                                <>
+                                    {detailTab === 'health' && (
+                                        <div className="space-y-4">
+                                            <div className="flex justify-between items-center mb-4">
+                                                <h3 className="text-lg font-medium text-gray-900">Geçmiş Tedaviler</h3>
+                                                {/* Add Health Record Button Placeholder */}
+                                            </div>
+                                            {animalDetails.health.length === 0 ? (
+                                                <p className="text-gray-500 text-center py-8">Kayıt bulunamadı.</p>
+                                            ) : (
+                                                <ul className="divide-y divide-gray-200">
+                                                    {animalDetails.health.map((record) => (
+                                                        <li key={record.id} className="py-4">
+                                                            <div className="flex justify-between">
+                                                                <div>
+                                                                    <p className="text-sm font-medium text-gray-900">{record.treatment_type}</p>
+                                                                    <p className="text-sm text-gray-500">{record.description}</p>
+                                                                    <p className="text-xs text-gray-400 mt-1">Vet: {record.veterinarian || '-'}</p>
+                                                                </div>
+                                                                <div className="text-right">
+                                                                    <p className="text-sm text-gray-900">{format(new Date(record.date), 'dd MMM yyyy', { locale: tr })}</p>
+                                                                    <p className="text-sm font-medium text-red-600 mt-1">-{record.cost} ₺</p>
+                                                                </div>
+                                                            </div>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {detailTab === 'feed' && (
+                                        <div className="space-y-4">
+                                            <h3 className="text-lg font-medium text-gray-900 mb-4">Yem Tüketim Geçmişi</h3>
+                                            {animalDetails.feed.length === 0 ? (
+                                                <p className="text-gray-500 text-center py-8">Kayıt bulunamadı.</p>
+                                            ) : (
+                                                <table className="min-w-full divide-y divide-gray-200">
+                                                    <thead className="bg-gray-50">
+                                                        <tr>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tarih</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Yem Tipi</th>
+                                                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Miktar</th>
+                                                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Maliyet</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="bg-white divide-y divide-gray-200">
+                                                        {animalDetails.feed.map((log) => (
+                                                            <tr key={log.id}>
+                                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                                    {format(new Date(log.date), 'dd MMM yyyy', { locale: tr })}
+                                                                </td>
+                                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.feed_type}</td>
+                                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{log.quantity} kg</td>
+                                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 text-right">{log.cost} ₺</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {detailTab === 'milk' && (
+                                        <div className="space-y-4">
+                                            <h3 className="text-lg font-medium text-gray-900 mb-4">Süt Verim Tablosu</h3>
+                                            {animalDetails.milk.length === 0 ? (
+                                                <p className="text-gray-500 text-center py-8">Kayıt bulunamadı.</p>
+                                            ) : (
+                                                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                                                    <table className="min-w-full divide-y divide-gray-200">
+                                                        <thead className="bg-gray-50">
+                                                            <tr>
+                                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tarih</th>
+                                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vakit</th>
+                                                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Miktar (L)</th>
+                                                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Yağ %</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="bg-white divide-y divide-gray-200">
+                                                            {animalDetails.milk.map((record) => (
+                                                                <tr key={record.id}>
+                                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                                        {format(new Date(record.date), 'dd MMM yyyy', { locale: tr })}
+                                                                    </td>
+                                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                                        {record.shift === 'morning' ? 'Sabah' : 'Akşam'}
+                                                                    </td>
+                                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium text-right">
+                                                                        {record.quantity_liters}
+                                                                    </td>
+                                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
+                                                                        {record.fat_rate || '-'}
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

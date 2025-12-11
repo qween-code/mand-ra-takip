@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Database } from '../types/supabase';
-import { Plus, TrendingUp, TrendingDown, DollarSign, Calendar } from 'lucide-react';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { Plus, TrendingUp, TrendingDown, DollarSign, Calendar, PieChart as PieIcon, BarChart as BarIcon } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 type Expense = Database['public']['Tables']['expenses']['Row'];
 type Sale = Database['public']['Tables']['sales']['Row'];
+
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
 const Financials = () => {
     const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -82,6 +85,35 @@ const Financials = () => {
     const totalExpense = expenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
     const netProfit = totalIncome - totalExpense;
 
+    // Prepare Chart Data
+    const expenseByCategory = expenses.reduce((acc, curr) => {
+        const cat = curr.category || 'Diğer';
+        acc[cat] = (acc[cat] || 0) + Number(curr.amount);
+        return acc;
+    }, {} as Record<string, number>);
+
+    const pieChartData = Object.entries(expenseByCategory).map(([name, value]) => ({ name, value }));
+
+    // Daily Income vs Expense for Bar Chart
+    const dailyDataMap = new Map<string, { date: string, income: number, expense: number }>();
+
+    sales.forEach(sale => {
+        const date = sale.created_at.split('T')[0];
+        const current = dailyDataMap.get(date) || { date, income: 0, expense: 0 };
+        current.income += Number(sale.total_amount);
+        dailyDataMap.set(date, current);
+    });
+
+    expenses.forEach(expense => {
+        const date = expense.date;
+        const current = dailyDataMap.get(date) || { date, income: 0, expense: 0 };
+        current.expense += Number(expense.amount);
+        dailyDataMap.set(date, current);
+    });
+
+    const barChartData = Array.from(dailyDataMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+
+
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -148,6 +180,72 @@ const Financials = () => {
                         <div className={`p-3 rounded-full ${netProfit >= 0 ? 'bg-indigo-100' : 'bg-red-100'}`}>
                             <DollarSign className={netProfit >= 0 ? 'text-indigo-600' : 'text-red-600'} size={24} />
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Charts Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Income vs Expense Bar Chart */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                        <BarIcon className="mr-2 h-5 w-5 text-gray-500" />
+                        Günlük Gelir/Gider Analizi
+                    </h3>
+                    <div className="h-80">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={barChartData}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                <XAxis
+                                    dataKey="date"
+                                    tickFormatter={(str) => format(parseISO(str), 'dd MMM', { locale: tr })}
+                                    fontSize={12}
+                                />
+                                <YAxis fontSize={12} />
+                                <Tooltip
+                                    formatter={(value: number) => `₺${value.toLocaleString('tr-TR')}`}
+                                    labelFormatter={(label) => format(parseISO(label), 'dd MMMM yyyy', { locale: tr })}
+                                />
+                                <Legend />
+                                <Bar dataKey="income" name="Gelir" fill="#10B981" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="expense" name="Gider" fill="#EF4444" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* Expense Distribution Pie Chart */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                        <PieIcon className="mr-2 h-5 w-5 text-gray-500" />
+                        Gider Dağılımı
+                    </h3>
+                    <div className="h-80">
+                        {pieChartData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={pieChartData}
+                                        cx="50%"
+                                        cy="50%"
+                                        labelLine={false}
+                                        label={({ name, percent }: { name?: string | number, percent?: number }) => `${name || ''} ${((percent || 0) * 100).toFixed(0)}%`}
+                                        outerRadius={100}
+                                        fill="#8884d8"
+                                        dataKey="value"
+                                    >
+                                        {pieChartData.map((_entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip formatter={(value: number) => `₺${value.toLocaleString('tr-TR')}`} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="h-full flex items-center justify-center text-gray-500">
+                                Veri bulunamadı.
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
