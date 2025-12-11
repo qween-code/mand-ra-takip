@@ -11,17 +11,9 @@ import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { clsx } from 'clsx';
 
-interface ProductionBatch {
-    id: string;
-    batch_number: string;
-    product_type: string;
-    milk_used_liters: number;
-    start_time: string;
-    end_time: string | null;
-    status: 'planned' | 'in_progress' | 'completed' | 'failed';
-    output_quantity: number | null;
-    output_unit: string | null;
-}
+import type { Database } from '../types/supabase';
+
+type ProductionBatch = Database['public']['Tables']['production_batches']['Row'];
 
 const Production: React.FC = () => {
     const [batches, setBatches] = useState<ProductionBatch[]>([]);
@@ -257,7 +249,7 @@ const Production: React.FC = () => {
                                                     <h3 className="text-base font-semibold leading-6 text-gray-900 mr-2">
                                                         {batch.product_type}
                                                     </h3>
-                                                    {getStatusBadge(batch.status)}
+                                                    {getStatusBadge(batch.status || '')}
                                                 </div>
                                                 <div className="mt-1 flex items-center text-sm text-gray-500">
                                                     <span className="truncate">Parti: {batch.batch_number}</span>
@@ -268,7 +260,7 @@ const Production: React.FC = () => {
                                         </div>
                                         <div className="flex flex-col items-end space-y-2">
                                             <div className="text-sm text-gray-500">
-                                                {format(new Date(batch.start_time), 'd MMM HH:mm', { locale: tr })}
+                                                {batch.start_time ? format(new Date(batch.start_time), 'd MMM HH:mm', { locale: tr }) : '-'}
                                                 {batch.end_time && ` - ${format(new Date(batch.end_time), 'HH:mm')}`}
                                             </div>
                                             {batch.status === 'in_progress' && (

@@ -9,8 +9,6 @@ import {
     Store,
     Truck,
     ArrowRight,
-    Calendar,
-    Package
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { format } from 'date-fns';
