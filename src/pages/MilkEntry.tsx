@@ -354,13 +354,13 @@ const MilkEntry: React.FC = () => {
         setManualForm(prev => ({ ...prev, amount: '' }));
     };
 
-    const handleAddCow = (newCow: Partial<Cow>) => {
-        addCowDB(newCow);
+    const handleAddCow = async (newCow: Partial<Cow>) => {
+        await addCowDB(newCow);
         setRefreshTrigger(prev => prev + 1);
     };
 
-    const handleAddCalf = (newCalf: Partial<Calf>) => {
-        addCalfDB(newCalf);
+    const handleAddCalf = async (newCalf: Partial<Calf>) => {
+        await addCalfDB(newCalf);
         setRefreshTrigger(prev => prev + 1);
     };
 
