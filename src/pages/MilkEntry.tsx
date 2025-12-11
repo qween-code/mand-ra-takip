@@ -3,19 +3,14 @@ import { supabase } from '../lib/supabase';
 import { Save, Trash2, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import type { Database } from '../types/supabase';
 
-interface MilkRecord {
-    id: string;
-    date: string;
-    shift: 'morning' | 'evening';
-    quantity_liters: number;
-    fat_rate: number | null;
-    ph_level: number | null;
-    notes: string | null;
-}
+type MilkRecord = Database['public']['Tables']['milk_records']['Row'];
+type Animal = Database['public']['Tables']['animals']['Row'];
 
 const MilkEntry: React.FC = () => {
-    const [records, setRecords] = useState<MilkRecord[]>([]);
+    const [records, setRecords] = useState<(MilkRecord & { animals: Animal | null })[]>([]);
+    const [animals, setAnimals] = useState<Animal[]>([]);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
 
@@ -23,25 +18,38 @@ const MilkEntry: React.FC = () => {
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [shift, setShift] = useState<'morning' | 'evening'>('morning');
     const [quantity, setQuantity] = useState('');
+    const [selectedAnimalId, setSelectedAnimalId] = useState<string>('');
     const [fatRate, setFatRate] = useState('');
     const [phLevel, setPhLevel] = useState('');
     const [notes, setNotes] = useState('');
 
     useEffect(() => {
         fetchRecords();
+        fetchAnimals();
     }, []);
+
+    const fetchAnimals = async () => {
+        const { data } = await supabase
+            .from('animals')
+            .select('*')
+            .eq('type', 'cow')
+            .eq('status', 'active')
+            .order('tag_number');
+        setAnimals(data || []);
+    };
 
     const fetchRecords = async () => {
         try {
             setLoading(true);
             const { data, error } = await supabase
                 .from('milk_records')
-                .select('*')
+                .select('*, animals(*)')
                 .order('date', { ascending: false })
                 .order('created_at', { ascending: false })
                 .limit(10);
 
             if (error) throw error;
+            // @ts-ignore: Supabase types join issue
             setRecords(data || []);
         } catch (error) {
             console.error('Error fetching records:', error);
@@ -62,6 +70,7 @@ const MilkEntry: React.FC = () => {
                     date,
                     shift,
                     quantity_liters: parseFloat(quantity),
+                    animal_id: selectedAnimalId || null,
                     fat_rate: fatRate ? parseFloat(fatRate) : null,
                     ph_level: phLevel ? parseFloat(phLevel) : null,
                     notes: notes || null,
@@ -72,6 +81,7 @@ const MilkEntry: React.FC = () => {
 
             // Reset form and refresh list
             setQuantity('');
+            setSelectedAnimalId('');
             setFatRate('');
             setPhLevel('');
             setNotes('');
@@ -140,6 +150,23 @@ const MilkEntry: React.FC = () => {
                                     >
                                         <option value="morning">Sabah</option>
                                         <option value="evening">Akşam</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label htmlFor="animal" className="block text-sm font-medium text-gray-700">İnek (Opsiyonel - Toplu Giriş için Boş Bırakın)</label>
+                                    <select
+                                        id="animal"
+                                        value={selectedAnimalId}
+                                        onChange={(e) => setSelectedAnimalId(e.target.value)}
+                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"
+                                    >
+                                        <option value="">-- Toplu Giriş --</option>
+                                        {animals.map(animal => (
+                                            <option key={animal.id} value={animal.id}>
+                                                {animal.tag_number} - {animal.name}
+                                            </option>
+                                        ))}
                                     </select>
                                 </div>
 
@@ -254,6 +281,11 @@ const MilkEntry: React.FC = () => {
                                                             }`}>
                                                             {record.shift === 'morning' ? 'Sabah' : 'Akşam'}
                                                         </span>
+                                                        {record.animals && (
+                                                            <span className="ml-2 inline-flex items-center rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-800">
+                                                                {record.animals.tag_number} ({record.animals.name})
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
                                                 <div className="ml-2 flex flex-shrink-0">

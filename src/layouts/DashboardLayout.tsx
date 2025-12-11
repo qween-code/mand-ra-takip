@@ -8,7 +8,9 @@ import {
     BarChart3,
     Menu,
     X,
-    LogOut
+    LogOut,
+    Wallet,
+    PawPrint
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -23,8 +25,10 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
     const navigation = [
         { name: 'Dashboard', href: '/', icon: LayoutDashboard },
         { name: 'Süt Girişi', href: '/milk-entry', icon: Milk },
+        { name: 'Hayvan Yönetimi', href: '/animals', icon: PawPrint },
         { name: 'Üretim', href: '/production', icon: Factory },
         { name: 'Lojistik & Satış', href: '/logistics', icon: Truck },
+        { name: 'Finans', href: '/financials', icon: Wallet },
         { name: 'Raporlar', href: '/reports', icon: BarChart3 },
     ];
 
