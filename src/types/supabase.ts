@@ -21,6 +21,7 @@ export type Database = {
                     status: string | null
                     tag_number: string
                     type: string
+                    target_consumption: number | null
                 }
                 Insert: {
                     birth_date?: string | null
@@ -45,6 +46,90 @@ export type Database = {
                     status?: string | null
                     tag_number?: string
                     type?: string
+                }
+                Relationships: []
+            }
+            farmers: {
+                Row: {
+                    created_at: string
+                    id: string
+                    name: string
+                    phone: string | null
+                    region_id: string | null
+                }
+                Insert: {
+                    created_at?: string
+                    id?: string
+                    name: string
+                    phone?: string | null
+                    region_id?: string | null
+                }
+                Update: {
+                    created_at?: string
+                    id?: string
+                    name?: string
+                    phone?: string | null
+                    region_id?: string | null
+                }
+                Relationships: []
+            }
+            milk_collections: {
+                Row: {
+                    amount: number
+                    collected_at: string | null
+                    created_at: string
+                    date: string
+                    farmer_id: string
+                    id: string
+                    quality_ok: boolean | null
+                    temperature: number | null
+                }
+                Insert: {
+                    amount?: number
+                    collected_at?: string | null
+                    created_at?: string
+                    date?: string
+                    farmer_id: string
+                    id?: string
+                    quality_ok?: boolean | null
+                    temperature?: number | null
+                }
+                Update: {
+                    amount?: number
+                    collected_at?: string | null
+                    created_at?: string
+                    date?: string
+                    farmer_id?: string
+                    id?: string
+                    quality_ok?: boolean | null
+                    temperature?: number | null
+                }
+                Relationships: []
+            }
+            daily_distributions: {
+                Row: {
+                    created_at: string
+                    date: string
+                    distributed_amount: number
+                    id: string
+                    returned_amount: number
+                    sales_point_id: string
+                }
+                Insert: {
+                    created_at?: string
+                    date?: string
+                    distributed_amount?: number
+                    id?: string
+                    returned_amount?: number
+                    sales_point_id: string
+                }
+                Update: {
+                    created_at?: string
+                    date?: string
+                    distributed_amount?: number
+                    id?: string
+                    returned_amount?: number
+                    sales_point_id?: string
                 }
                 Relationships: []
             }
