@@ -1,733 +1,545 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Save, Plus, Minus, History, Check, Search, Sun, Moon, Edit3, X, Activity, Calendar, FileText, Filter, UserPlus } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
-import type { Cow, Calf } from '../types';
-import { getTodayCows, saveMilkRecord, getCalves, updateCalfConsumption, addCowDB, addCalfDB, getCowHistory } from '../services/db';
+// ═══════════════════════════════════════════════════════════════════════════
+// MANDIRA ASISTANI - MILK ENTRY PAGE
+// Daily milk production entry per cow with date selection
+// ═══════════════════════════════════════════════════════════════════════════
 
-// --- MODALS ---
+import React, { useState, useEffect } from 'react';
+import { format, subDays } from 'date-fns';
+import { tr } from 'date-fns/locale';
+import {
+    Save,
+    Calendar,
+    Sun,
+    Moon,
+    ChevronLeft,
+    ChevronRight,
+    CheckCircle2,
+    AlertCircle,
+    Plus,
+    Minus,
+    Beef,
+    Droplets
+} from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { Card, CardHeader, Button, Badge, QuickNumberInput, cn } from '../components/ui';
+import type { Animal, DailyMilkProduction, CalfMilkConsumption } from '../types';
 
-const CowDetailModal: React.FC<{ cow: Cow; onClose: () => void }> = ({ cow, onClose }) => {
-    const [historyData, setHistoryData] = useState<any[]>([]);
+interface CowMilkEntry {
+    animal: Animal;
+    morning: number;
+    evening: number;
+    morningRecordId: string | null;
+    eveningRecordId: string | null;
+}
 
-    useEffect(() => {
-        const loadHistory = async () => {
-            const data = await getCowHistory(cow.id);
-            setHistoryData(data);
-        };
-        loadHistory();
-    }, [cow.id]);
-
-    // Calculate dynamic "Last Milking" status
-    const lastMilking = cow.eveningMilked ? "Bugün Akşam" : cow.morningMilked ? "Bugün Sabah" : "Dün Akşam";
-
-    // Placeholder data for Health Notes
-    const healthNotes = [
-        {
-            id: 1,
-            type: 'routine',
-            title: 'Rutin Kontrol',
-            date: '15 Kas 2025',
-            note: 'Genel sağlık durumu iyi. Vitamin takviyesi yapıldı. Tırnak bakımı normal.'
-        },
-        {
-            id: 2,
-            type: 'vaccine',
-            title: 'Aşı Takvimi',
-            date: '01 Eki 2025',
-            note: 'Şap aşısı 2. doz uygulandı. Reaksiyon gözlenmedi.'
-        }
-    ];
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl animate-fade-in" onClick={e => e.stopPropagation()}>
-                {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50/50">
-                    <div className="flex items-center space-x-4">
-                        <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-3xl shadow-inner">
-                            🐮
-                        </div>
-                        <div>
-                            <h3 className="text-2xl font-bold text-slate-900">{cow.name}</h3>
-                            <div className="flex items-center space-x-2 mt-1">
-                                <span className="text-sm font-mono bg-slate-200 px-2 py-0.5 rounded text-slate-700 font-bold">{cow.tagNumber}</span>
-                                <span className="text-sm text-slate-500">• Holştayn • 4 Yaşında</span>
-                            </div>
-                        </div>
-                    </div>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-500">
-                        <X size={24} />
-                    </button>
-                </div>
-
-                <div className="p-6 space-y-8">
-                    {/* Key Stats */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="p-4 bg-orange-50 rounded-xl border border-orange-100">
-                            <p className="text-xs font-bold text-orange-600 uppercase mb-1">Son Sağım</p>
-                            <p className="font-bold text-slate-800">{lastMilking}</p>
-                        </div>
-                        <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
-                            <p className="text-xs font-bold text-blue-600 uppercase mb-1">Günlük Ort.</p>
-                            <p className="font-bold text-slate-800">24.5 Litre</p>
-                        </div>
-                        <div className="p-4 bg-green-50 rounded-xl border border-green-100">
-                            <p className="text-xs font-bold text-green-600 uppercase mb-1">Laktasyon</p>
-                            <p className="font-bold text-slate-800">145. Gün</p>
-                        </div>
-                        <div className="p-4 bg-purple-50 rounded-xl border border-purple-100">
-                            <p className="text-xs font-bold text-purple-600 uppercase mb-1">Sağlık</p>
-                            <p className="font-bold text-slate-800 flex items-center"><Activity size={16} className="mr-1 text-green-500" /> İyi</p>
-                        </div>
-                    </div>
-
-                    {/* Chart */}
-                    <div>
-                        <h4 className="font-bold text-slate-800 mb-4 flex items-center">
-                            <History size={18} className="mr-2 text-slate-400" />
-                            Son 7 Gün Verimi
-                        </h4>
-                        <div className="h-64 w-full bg-slate-50 rounded-xl p-4 border border-slate-100">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={historyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                                    <Tooltip
-                                        cursor={{ fill: '#f1f5f9' }}
-                                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                        formatter={(value: number) => [`${value} L`, '']}
-                                    />
-                                    <Bar dataKey="morning" name="Sabah" fill="#fdba74" stackId="a" radius={[0, 0, 4, 4]} />
-                                    <Bar dataKey="evening" name="Akşam" fill="#6366f1" stackId="a" radius={[4, 4, 0, 0]} />
-                                    <ReferenceLine y={24} stroke="#cbd5e1" strokeDasharray="3 3" label={{ position: 'right', value: 'Hedef', fill: '#94a3b8', fontSize: 10 }} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                        <div className="flex justify-center space-x-6 mt-3">
-                            <div className="flex items-center text-xs text-slate-500 font-medium">
-                                <div className="w-3 h-3 bg-orange-300 rounded mr-2"></div> Sabah
-                            </div>
-                            <div className="flex items-center text-xs text-slate-500 font-medium">
-                                <div className="w-3 h-3 bg-indigo-500 rounded mr-2"></div> Akşam
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Health Notes */}
-                    <div>
-                        <h4 className="font-bold text-slate-800 mb-4 flex items-center">
-                            <FileText size={18} className="mr-2 text-slate-400" />
-                            Veteriner & Sağlık Notları
-                        </h4>
-                        <div className="space-y-3">
-                            {healthNotes.map((note) => (
-                                <div key={note.id} className="flex gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 transition-colors">
-                                    <div className="flex-shrink-0 mt-1">
-                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${note.type === 'routine' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
-                                            {note.type === 'routine' ? <Check size={16} /> : <Activity size={16} />}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div className="flex justify-between items-center mb-1">
-                                            <p className="font-bold text-slate-900 text-sm">{note.title}</p>
-                                            <span className="text-xs text-slate-400 flex items-center"><Calendar size={12} className="mr-1" /> {note.date}</span>
-                                        </div>
-                                        <p className="text-sm text-slate-600 leading-relaxed">
-                                            {note.note}
-                                        </p>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
-                <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex justify-end space-x-3 rounded-b-2xl">
-                    <button onClick={onClose} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg transition-colors text-sm">Kapat</button>
-                    <button className="px-6 py-2 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-colors text-sm shadow-lg shadow-slate-200 flex items-center">
-                        <Edit3 size={16} className="mr-2" />
-                        Not Ekle
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const AddCowModal: React.FC<{ onClose: () => void; onSave: (cow: Partial<Cow>) => void }> = ({ onClose, onSave }) => {
-    const [formData, setFormData] = useState({ name: '', tagNumber: '' });
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (formData.name && formData.tagNumber) {
-            onSave(formData);
-            onClose();
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6" onClick={e => e.stopPropagation()}>
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-lg font-bold text-slate-900">Yeni İnek Ekle</h3>
-                    <button onClick={onClose}><X size={20} className="text-slate-400" /></button>
-                </div>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Küpe Numarası</label>
-                        <input
-                            autoFocus
-                            className="w-full border border-slate-300 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none font-medium"
-                            placeholder="Örn: TR-001"
-                            value={formData.tagNumber}
-                            onChange={e => setFormData({ ...formData, tagNumber: e.target.value })}
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">İsim</label>
-                        <input
-                            className="w-full border border-slate-300 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none font-medium"
-                            placeholder="Örn: Sarıkız"
-                            value={formData.name}
-                            onChange={e => setFormData({ ...formData, name: e.target.value })}
-                        />
-                    </div>
-                    <div className="pt-2 flex space-x-3">
-                        <button type="button" onClick={onClose} className="flex-1 py-3 text-slate-600 bg-slate-100 rounded-xl font-bold hover:bg-slate-200 transition-colors">İptal</button>
-                        <button type="submit" className="flex-1 py-3 text-white bg-blue-600 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 transition-colors">Kaydet</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
-};
-
-const AddCalfModal: React.FC<{ onClose: () => void; onSave: (calf: Partial<Calf>) => void; mothers: Cow[] }> = ({ onClose, onSave, mothers }) => {
-    const [formData, setFormData] = useState({ name: '', motherName: '', ageMonths: '', targetConsumption: '' });
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (formData.name && formData.motherName) {
-            onSave({
-                name: formData.name,
-                motherName: formData.motherName,
-                ageMonths: Number(formData.ageMonths) || 0,
-                targetConsumption: Number(formData.targetConsumption) || 4
-            });
-            onClose();
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6" onClick={e => e.stopPropagation()}>
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-lg font-bold text-slate-900">Yeni Buzağı Ekle</h3>
-                    <button onClick={onClose}><X size={20} className="text-slate-400" /></button>
-                </div>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Buzağı İsmi</label>
-                        <input
-                            autoFocus
-                            className="w-full border border-slate-300 rounded-xl p-3 focus:ring-2 focus:ring-orange-500 outline-none font-medium"
-                            placeholder="Örn: Minnoş"
-                            value={formData.name}
-                            onChange={e => setFormData({ ...formData, name: e.target.value })}
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Annesi</label>
-                        <select
-                            className="w-full border border-slate-300 rounded-xl p-3 focus:ring-2 focus:ring-orange-500 outline-none font-medium bg-white"
-                            value={formData.motherName}
-                            onChange={e => setFormData({ ...formData, motherName: e.target.value })}
-                        >
-                            <option value="">Seçiniz...</option>
-                            {mothers.map(cow => <option key={cow.id} value={cow.name}>{cow.tagNumber} - {cow.name}</option>)}
-                        </select>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Yaş (Ay)</label>
-                            <input
-                                type="number"
-                                className="w-full border border-slate-300 rounded-xl p-3 focus:ring-2 focus:ring-orange-500 outline-none font-medium"
-                                placeholder="0"
-                                value={formData.ageMonths}
-                                onChange={e => setFormData({ ...formData, ageMonths: e.target.value })}
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Hedef (L)</label>
-                            <input
-                                type="number"
-                                className="w-full border border-slate-300 rounded-xl p-3 focus:ring-2 focus:ring-orange-500 outline-none font-medium"
-                                placeholder="4"
-                                value={formData.targetConsumption}
-                                onChange={e => setFormData({ ...formData, targetConsumption: e.target.value })}
-                            />
-                        </div>
-                    </div>
-                    <div className="pt-2 flex space-x-3">
-                        <button type="button" onClick={onClose} className="flex-1 py-3 text-slate-600 bg-slate-100 rounded-xl font-bold hover:bg-slate-200 transition-colors">İptal</button>
-                        <button type="submit" className="flex-1 py-3 text-white bg-orange-500 rounded-xl font-bold hover:bg-orange-600 shadow-lg shadow-orange-200 transition-colors">Kaydet</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
-};
-
-// --- MAIN COMPONENT ---
+interface CalfFeedingEntry {
+    calf: Animal;
+    consumption: number;
+    recordId: string | null;
+}
 
 const MilkEntry: React.FC = () => {
-    const [cows, setCows] = useState<Cow[]>([]);
-    const [calves, setCalves] = useState<Calf[]>([]);
-    const [isSaved, setIsSaved] = useState(false);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [filterStatus, setFilterStatus] = useState<'all' | 'morning_done' | 'morning_pending' | 'evening_done' | 'evening_pending'>('all');
-    const [selectedCow, setSelectedCow] = useState<Cow | null>(null);
-    const [isAddCowOpen, setIsAddCowOpen] = useState(false);
-    const [isAddCalfOpen, setIsAddCalfOpen] = useState(false);
-    const [refreshTrigger, setRefreshTrigger] = useState(0);
+    const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+    const [cowEntries, setCowEntries] = useState<CowMilkEntry[]>([]);
+    const [calfEntries, setCalfEntries] = useState<CalfFeedingEntry[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [activeTab, setActiveTab] = useState<'cows' | 'calves'>('cows');
+    const [saveSuccess, setSaveSuccess] = useState(false);
 
-    // New State for Quick Manual Entry Form
-    const [manualForm, setManualForm] = useState({
-        cowId: '',
-        session: 'morning' as 'morning' | 'evening',
-        amount: ''
-    });
-
-    // Load Data
     useEffect(() => {
-        const loadData = async () => {
-            const loadedCows = await getTodayCows();
-            setCows(loadedCows);
-            const loadedCalves = await getCalves();
-            setCalves(loadedCalves);
-        };
         loadData();
-    }, [refreshTrigger]);
+    }, [selectedDate]);
 
-    const handleMilkChange = (id: string, session: 'morning' | 'evening', value: string) => {
-        const val = parseFloat(value);
-        const numVal = isNaN(val) ? 0 : val;
+    const loadData = async () => {
+        setLoading(true);
+        try {
+            // Fetch active cows
+            const { data: cows } = await supabase
+                .from('animals')
+                .select('*')
+                .eq('type', 'cow')
+                .eq('status', 'active')
+                .order('name');
 
-        // Optimistic Update
-        setCows(prev => prev.map(c => {
-            if (c.id !== id) return c;
-            const keyMilked = session === 'morning' ? 'morningMilked' : 'eveningMilked';
-            return {
-                ...c,
-                [session === 'morning' ? 'morningLiters' : 'eveningLiters']: numVal,
-                [keyMilked]: numVal > 0
-            };
-        }));
+            // Fetch existing milk records for the date
+            const { data: milkRecords } = await supabase
+                .from('daily_milk_production')
+                .select('*')
+                .eq('date', selectedDate);
 
-        // DB Update
-        saveMilkRecord(id, session, numVal);
-    };
+            // Merge cows with their records
+            const entries: CowMilkEntry[] = (cows || []).map((cow) => {
+                const morningRecord = milkRecords?.find(
+                    (r) => r.animal_id === cow.id && r.shift === 'morning'
+                );
+                const eveningRecord = milkRecords?.find(
+                    (r) => r.animal_id === cow.id && r.shift === 'evening'
+                );
+                return {
+                    animal: cow,
+                    morning: morningRecord?.quantity_liters || 0,
+                    evening: eveningRecord?.quantity_liters || 0,
+                    morningRecordId: morningRecord?.id || null,
+                    eveningRecordId: eveningRecord?.id || null,
+                };
+            });
 
-    const adjustCalfMilk = (id: string, delta: number) => {
-        // Optimistic Update
-        setCalves(prev => prev.map(c => c.id === id ? { ...c, dailyConsumption: Math.max(0, c.dailyConsumption + delta) } : c));
+            setCowEntries(entries);
 
-        // DB Update
-        updateCalfConsumption(id, delta);
-    };
+            // Fetch calves
+            const { data: calves } = await supabase
+                .from('animals')
+                .select('*, mother:animals!mother_id(name)')
+                .eq('type', 'calf')
+                .eq('status', 'active')
+                .order('name');
 
-    const handleSaveAll = () => {
-        setIsSaved(true);
-        setTimeout(() => setIsSaved(false), 3000);
-    };
+            // Fetch calf consumption records
+            const { data: consumptionRecords } = await supabase
+                .from('calf_milk_consumption')
+                .select('*')
+                .eq('date', selectedDate);
 
-    // Quick Manual Form Submit
-    const handleManualSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!manualForm.cowId || !manualForm.amount) return;
+            const calfData: CalfFeedingEntry[] = (calves || []).map((calf) => {
+                const record = consumptionRecords?.find((r) => r.calf_id === calf.id);
+                return {
+                    calf,
+                    consumption: record?.quantity_liters || 0,
+                    recordId: record?.id || null,
+                };
+            });
 
-        handleMilkChange(manualForm.cowId, manualForm.session, manualForm.amount);
-
-        // Reset amount but keep cow/session for fast entry
-        setManualForm(prev => ({ ...prev, amount: '' }));
-    };
-
-    const handleAddCow = async (newCow: Partial<Cow>) => {
-        await addCowDB(newCow);
-        setRefreshTrigger(prev => prev + 1);
-    };
-
-    const handleAddCalf = async (newCalf: Partial<Calf>) => {
-        await addCalfDB(newCalf);
-        setRefreshTrigger(prev => prev + 1);
-    };
-
-    const filteredCows = cows.filter(c => {
-        const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            c.tagNumber.toLowerCase().includes(searchTerm.toLowerCase());
-
-        let matchesFilter = true;
-        switch (filterStatus) {
-            case 'morning_done':
-                matchesFilter = c.morningMilked;
-                break;
-            case 'morning_pending':
-                matchesFilter = !c.morningMilked;
-                break;
-            case 'evening_done':
-                matchesFilter = c.eveningMilked;
-                break;
-            case 'evening_pending':
-                matchesFilter = !c.eveningMilked;
-                break;
-            default:
-                matchesFilter = true;
+            setCalfEntries(calfData);
+        } catch (error) {
+            console.error('Error loading data:', error);
+        } finally {
+            setLoading(false);
         }
+    };
 
-        return matchesSearch && matchesFilter;
-    });
+    const handleCowMilkChange = (index: number, shift: 'morning' | 'evening', value: number) => {
+        setCowEntries((prev) => {
+            const updated = [...prev];
+            updated[index] = { ...updated[index], [shift]: value };
+            return updated;
+        });
+    };
 
-    const totalMorning = useMemo(() => cows.reduce((sum, c) => sum + c.morningLiters, 0), [cows]);
-    const totalEvening = useMemo(() => cows.reduce((sum, c) => sum + c.eveningLiters, 0), [cows]);
-    const totalMilk = totalMorning + totalEvening;
-    const totalCalf = useMemo(() => calves.reduce((sum, c) => sum + c.dailyConsumption, 0), [calves]);
-    const netMilk = totalMilk - totalCalf;
+    const handleCalfConsumptionChange = (index: number, value: number) => {
+        setCalfEntries((prev) => {
+            const updated = [...prev];
+            updated[index] = { ...updated[index], consumption: value };
+            return updated;
+        });
+    };
+
+    const saveCowRecords = async () => {
+        setSaving(true);
+        setSaveSuccess(false);
+
+        try {
+            for (const entry of cowEntries) {
+                // Save morning record
+                if (entry.morning > 0) {
+                    if (entry.morningRecordId) {
+                        await supabase
+                            .from('daily_milk_production')
+                            .update({ quantity_liters: entry.morning })
+                            .eq('id', entry.morningRecordId);
+                    } else {
+                        await supabase.from('daily_milk_production').insert({
+                            date: selectedDate,
+                            animal_id: entry.animal.id,
+                            shift: 'morning',
+                            quantity_liters: entry.morning,
+                        });
+                    }
+                }
+
+                // Save evening record
+                if (entry.evening > 0) {
+                    if (entry.eveningRecordId) {
+                        await supabase
+                            .from('daily_milk_production')
+                            .update({ quantity_liters: entry.evening })
+                            .eq('id', entry.eveningRecordId);
+                    } else {
+                        await supabase.from('daily_milk_production').insert({
+                            date: selectedDate,
+                            animal_id: entry.animal.id,
+                            shift: 'evening',
+                            quantity_liters: entry.evening,
+                        });
+                    }
+                }
+            }
+
+            setSaveSuccess(true);
+            setTimeout(() => setSaveSuccess(false), 3000);
+            loadData(); // Refresh to get new record IDs
+        } catch (error) {
+            console.error('Error saving milk records:', error);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const saveCalfRecords = async () => {
+        setSaving(true);
+        setSaveSuccess(false);
+
+        try {
+            for (const entry of calfEntries) {
+                if (entry.consumption > 0) {
+                    if (entry.recordId) {
+                        await supabase
+                            .from('calf_milk_consumption')
+                            .update({ quantity_liters: entry.consumption })
+                            .eq('id', entry.recordId);
+                    } else {
+                        await supabase.from('calf_milk_consumption').insert({
+                            date: selectedDate,
+                            calf_id: entry.calf.id,
+                            source_cow_id: entry.calf.mother_id,
+                            quantity_liters: entry.consumption,
+                            feeding_time: 'morning',
+                        });
+                    }
+                }
+            }
+
+            setSaveSuccess(true);
+            setTimeout(() => setSaveSuccess(false), 3000);
+            loadData();
+        } catch (error) {
+            console.error('Error saving calf records:', error);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const changeDate = (days: number) => {
+        const newDate = days > 0
+            ? format(subDays(new Date(selectedDate), -days), 'yyyy-MM-dd')
+            : format(subDays(new Date(selectedDate), Math.abs(days)), 'yyyy-MM-dd');
+        setSelectedDate(newDate);
+    };
+
+    const totalMorning = cowEntries.reduce((sum, e) => sum + e.morning, 0);
+    const totalEvening = cowEntries.reduce((sum, e) => sum + e.evening, 0);
+    const totalDaily = totalMorning + totalEvening;
+    const totalCalfConsumption = calfEntries.reduce((sum, e) => sum + e.consumption, 0);
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-screen">
+                <div className="loading-spinner" />
+            </div>
+        );
+    }
 
     return (
-        <div className="space-y-6 pb-32 md:pb-0">
-            {/* Modals */}
-            {selectedCow && <CowDetailModal cow={selectedCow} onClose={() => setSelectedCow(null)} />}
-            {isAddCowOpen && <AddCowModal onClose={() => setIsAddCowOpen(false)} onSave={handleAddCow} />}
-            {isAddCalfOpen && <AddCalfModal onClose={() => setIsAddCalfOpen(false)} onSave={handleAddCalf} mothers={cows} />}
-
+        <div className="page-content">
             {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
                 <div>
-                    <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Günlük Süt Girişi</h2>
-                    <p className="text-slate-500 text-sm mt-1">Sabah ve akşam sağımlarını takip edin.</p>
-                </div>
-                <div>
-                    <span className="inline-flex items-center px-4 py-2 rounded-lg bg-blue-50 text-blue-700 text-sm font-medium border border-blue-100">
-                        📅 {new Date().toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                    </span>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 space-y-6">
-
-                    {/* Quick Manual Entry Form */}
-                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-                        <div className="flex items-center space-x-2 mb-4">
-                            <div className="bg-blue-100 p-2 rounded-lg text-blue-600">
-                                <Edit3 size={18} />
-                            </div>
-                            <h3 className="font-bold text-slate-800">Hızlı Manuel Giriş</h3>
-                        </div>
-
-                        <form onSubmit={handleManualSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                            <div className="md:col-span-1">
-                                <label className="block text-xs font-semibold text-slate-500 mb-1.5">İnek Seçimi</label>
-                                <select
-                                    value={manualForm.cowId}
-                                    onChange={(e) => setManualForm({ ...manualForm, cowId: e.target.value })}
-                                    className="w-full border border-slate-300 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none bg-slate-50 h-12"
-                                >
-                                    <option value="">İnek Seç...</option>
-                                    {cows.map(c => (
-                                        <option key={c.id} value={c.id}>{c.tagNumber} - {c.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="md:col-span-1">
-                                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Sağım Vakti</label>
-                                <div className="flex bg-slate-100 rounded-xl p-1 h-12">
-                                    <button
-                                        type="button"
-                                        onClick={() => setManualForm({ ...manualForm, session: 'morning' })}
-                                        className={`flex-1 flex items-center justify-center py-2 rounded-lg text-sm font-medium transition-all ${manualForm.session === 'morning' ? 'bg-white text-orange-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
-                                    >
-                                        <Sun size={16} className="mr-1.5" /> Sabah
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setManualForm({ ...manualForm, session: 'evening' })}
-                                        className={`flex-1 flex items-center justify-center py-2 rounded-lg text-sm font-medium transition-all ${manualForm.session === 'evening' ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
-                                    >
-                                        <Moon size={16} className="mr-1.5" /> Akşam
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="md:col-span-1">
-                                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Miktar (L)</label>
-                                <div className="relative">
-                                    <input
-                                        type="number"
-                                        placeholder="0.0"
-                                        value={manualForm.amount}
-                                        onChange={(e) => setManualForm({ ...manualForm, amount: e.target.value })}
-                                        className="w-full border border-slate-300 rounded-xl p-3 pl-3 pr-8 text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none font-bold text-slate-800 h-12"
-                                    />
-                                    <span className="absolute right-3 top-3.5 text-slate-400 text-xs font-medium">L</span>
-                                </div>
-                            </div>
-
-                            <div className="md:col-span-1">
-                                <button
-                                    type="submit"
-                                    disabled={!manualForm.cowId || !manualForm.amount}
-                                    className="w-full bg-slate-900 text-white py-3 rounded-xl text-sm font-bold hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-slate-200 h-12"
-                                >
-                                    Kaydet
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-
-                    {/* List Table */}
-                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                        {/* Search Bar Header */}
-                        <div className="p-4 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4">
-                            <div className="flex items-center space-x-2">
-                                <h3 className="font-semibold text-slate-800">Sağım Listesi</h3>
-                                <span className="text-xs font-medium px-2 py-0.5 rounded bg-slate-200 text-slate-600">{filteredCows.length} Baş</span>
-
-                                <button onClick={() => setIsAddCowOpen(true)} className="ml-2 flex items-center px-2 py-1 text-xs font-bold text-blue-600 bg-blue-50 rounded hover:bg-blue-100 transition-colors border border-blue-100">
-                                    <UserPlus size={14} className="mr-1" /> Ekle
-                                </button>
-                            </div>
-
-                            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                                {/* Filter Dropdown */}
-                                <div className="relative">
-                                    <Filter size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                                    <select
-                                        value={filterStatus}
-                                        onChange={(e) => setFilterStatus(e.target.value as any)}
-                                        className="pl-9 pr-8 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all w-full appearance-none bg-white cursor-pointer"
-                                    >
-                                        <option value="all">Tümü</option>
-                                        <option value="morning_done">Sabah: Tamam</option>
-                                        <option value="morning_pending">Sabah: Bekliyor</option>
-                                        <option value="evening_done">Akşam: Tamam</option>
-                                        <option value="evening_pending">Akşam: Bekliyor</option>
-                                    </select>
-                                </div>
-
-                                {/* Search Input */}
-                                <div className="relative w-full sm:w-64">
-                                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                    <input
-                                        type="text"
-                                        placeholder="İnek ara (No/İsim)..."
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all w-full"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm">
-                                <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                                    <tr>
-                                        <th className="px-2 md:px-4 py-3 font-semibold w-1/4">İnek Bilgisi</th>
-                                        <th className="px-2 py-3 text-center font-semibold w-24 hidden sm:table-cell">Dün</th>
-                                        <th className="px-2 md:px-4 py-3 text-center font-semibold bg-orange-50/30 text-orange-800 border-l border-r border-orange-100">
-                                            <div className="flex items-center justify-center space-x-1">
-                                                <Sun size={14} /> <span>Sabah</span>
-                                            </div>
-                                        </th>
-                                        <th className="px-2 md:px-4 py-3 text-center font-semibold bg-indigo-50/30 text-indigo-800 border-r border-indigo-100">
-                                            <div className="flex items-center justify-center space-x-1">
-                                                <Moon size={14} /> <span>Akşam</span>
-                                            </div>
-                                        </th>
-                                        <th className="px-2 md:px-4 py-3 text-center font-semibold w-24">Toplam</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {filteredCows.map(cow => (
-                                        <tr key={cow.id} className="hover:bg-slate-50/50 transition-colors group">
-                                            <td className="px-2 md:px-4 py-3 cursor-pointer group/cell" onClick={() => setSelectedCow(cow)}>
-                                                <div className="font-semibold text-slate-900 group-hover/cell:text-blue-600 transition-colors text-sm md:text-base">{cow.name}</div>
-                                                <div className="text-xs text-slate-500 font-mono bg-slate-100 inline-block px-1.5 py-0.5 rounded mt-1 group-hover/cell:bg-blue-50 group-hover/cell:text-blue-600 transition-colors">{cow.tagNumber}</div>
-                                            </td>
-                                            <td className="px-2 py-3 text-center text-slate-400 hidden sm:table-cell">
-                                                {cow.yesterdayLiters?.toFixed(1) || '0.0'} L
-                                            </td>
-
-                                            {/* Morning Column */}
-                                            <td className={`px-2 py-3 border-l border-r border-slate-100 transition-colors ${cow.morningLiters > 0 ? 'bg-orange-50/30' : 'bg-transparent'}`}>
-                                                <div className="flex items-center justify-center space-x-2">
-                                                    <input
-                                                        type="number"
-                                                        value={cow.morningLiters === 0 ? '' : cow.morningLiters}
-                                                        placeholder="-"
-                                                        onChange={(e) => handleMilkChange(cow.id, 'morning', e.target.value)}
-                                                        className={`w-full max-w-[80px] h-10 text-center border rounded-lg py-2 px-1 focus:ring-2 focus:outline-none font-bold text-slate-800 transition-all ${cow.morningLiters > 0 ? 'border-orange-300 bg-white shadow-sm' : 'border-slate-200 bg-slate-50 focus:bg-white focus:border-orange-400 focus:ring-orange-100'}`}
-                                                    />
-                                                </div>
-                                            </td>
-
-                                            {/* Evening Column */}
-                                            <td className={`px-2 py-3 border-r border-slate-100 transition-colors ${cow.eveningLiters > 0 ? 'bg-indigo-50/30' : 'bg-transparent'}`}>
-                                                <div className="flex items-center justify-center space-x-2">
-                                                    <input
-                                                        type="number"
-                                                        value={cow.eveningLiters === 0 ? '' : cow.eveningLiters}
-                                                        placeholder="-"
-                                                        onChange={(e) => handleMilkChange(cow.id, 'evening', e.target.value)}
-                                                        className={`w-full max-w-[80px] h-10 text-center border rounded-lg py-2 px-1 focus:ring-2 focus:outline-none font-bold text-slate-800 transition-all ${cow.eveningLiters > 0 ? 'border-indigo-300 bg-white shadow-sm' : 'border-slate-200 bg-slate-50 focus:bg-white focus:border-indigo-400 focus:ring-indigo-100'}`}
-                                                    />
-                                                </div>
-                                            </td>
-
-                                            {/* Total Column */}
-                                            <td className="px-2 md:px-4 py-3 text-center">
-                                                <span className={`font-black text-lg ${cow.morningLiters + cow.eveningLiters > 0 ? 'text-slate-800' : 'text-slate-300'}`}>
-                                                    {(cow.morningLiters + cow.eveningLiters).toFixed(1)}
-                                                </span>
-                                                <span className="text-xs text-slate-400 ml-1">L</span>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        {filteredCows.length === 0 && (
-                            <div className="p-8 text-center text-slate-500">
-                                Kayıt bulunamadı.
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Calf Section */}
-                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="font-bold text-slate-800 flex items-center">
-                                <span className="bg-orange-100 p-2 rounded-lg text-orange-600 mr-3">🍼</span>
-                                Buzağı Tüketimi
-                            </h3>
-                            <button onClick={() => setIsAddCalfOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-orange-600 bg-orange-50 rounded-lg hover:bg-orange-100 transition-colors border border-orange-100">
-                                <Plus size={14} className="mr-1" /> Buzağı Ekle
-                            </button>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {calves.map(calf => (
-                                <div key={calf.id} className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-orange-200 hover:shadow-md transition-all">
-                                    <div className="flex justify-between items-start mb-4">
-                                        <div>
-                                            <p className="font-bold text-slate-900 text-lg">{calf.name}</p>
-                                            <p className="text-xs text-slate-500">Anne: {calf.motherName} • {calf.ageMonths} Aylık</p>
-                                        </div>
-                                        <span className="text-xs font-bold bg-orange-50 text-orange-700 px-2 py-1 rounded-full border border-orange-100">Hedef: {calf.targetConsumption}L</span>
-                                    </div>
-
-                                    <div className="flex items-center justify-between bg-slate-50 p-2 rounded-lg">
-                                        <button onClick={() => adjustCalfMilk(calf.id, -0.5)} className="w-12 h-12 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200 flex items-center justify-center transition-colors">
-                                            <Minus size={20} />
-                                        </button>
-                                        <span className="font-bold text-2xl text-slate-800">{calf.dailyConsumption} <span className="text-sm font-normal text-slate-500">L</span></span>
-                                        <button onClick={() => adjustCalfMilk(calf.id, 0.5)} className="w-12 h-12 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-green-50 hover:text-green-600 hover:border-green-200 flex items-center justify-center transition-colors">
-                                            <Plus size={20} />
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+                    <h1 className="text-2xl font-bold text-[var(--text-primary)]">Süt Girişi</h1>
+                    <p className="text-[var(--text-secondary)] mt-1">Günlük süt üretimini kaydedin</p>
                 </div>
 
-                {/* Summary Card - Desktop Sticky */}
-                <div className="hidden lg:block lg:col-span-1">
-                    <div className="sticky top-6 bg-white rounded-2xl border border-blue-100 shadow-xl shadow-blue-50/50 p-6">
-                        <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center">
-                            Günün Özeti
-                            <span className="ml-auto text-xs font-normal text-slate-400 bg-slate-50 px-2 py-1 rounded border border-slate-100">Canlı</span>
-                        </h3>
-
-                        <div className="space-y-4 mb-8">
-                            <div className="bg-orange-50/50 p-3 rounded-xl border border-orange-100">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-orange-900 text-sm font-medium flex items-center"><Sun size={14} className="mr-2" /> Sabah</span>
-                                    <span className="font-bold text-orange-700 text-lg">{totalMorning.toFixed(1)} L</span>
-                                </div>
-                            </div>
-
-                            <div className="bg-indigo-50/50 p-3 rounded-xl border border-indigo-100">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-indigo-900 text-sm font-medium flex items-center"><Moon size={14} className="mr-2" /> Akşam</span>
-                                    <span className="font-bold text-indigo-700 text-lg">{totalEvening.toFixed(1)} L</span>
-                                </div>
-                            </div>
-
-                            <div className="flex justify-between items-center px-2">
-                                <span className="text-slate-500 text-sm font-medium">Buzağı Tüketimi</span>
-                                <span className="font-bold text-red-500 text-lg">- {totalCalf.toFixed(1)} L</span>
-                            </div>
-
-                            <div className="h-px bg-slate-200 my-2"></div>
-
-                            <div className="flex justify-between items-center p-4 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-200">
-                                <span className="font-bold opacity-90">NET SÜT</span>
-                                <span className="font-black text-3xl tracking-tight">{netMilk.toFixed(1)} L</span>
-                            </div>
-                        </div>
-
-                        <button
-                            onClick={handleSaveAll}
-                            disabled={isSaved}
-                            className={`w-full py-4 rounded-xl font-bold text-white shadow-lg transition-all transform active:scale-[0.98] flex items-center justify-center space-x-2 ${isSaved
-                                ? 'bg-green-500 shadow-green-200 cursor-default'
-                                : 'bg-slate-900 hover:bg-slate-800 shadow-slate-200'
-                                }`}
-                        >
-                            {isSaved ? (
-                                <><Check size={20} /> <span>Kaydedildi</span></>
-                            ) : (
-                                <><Save size={20} /> <span>Günü Tamamla</span></>
-                            )}
-                        </button>
-
-                        <div className="mt-6 flex justify-center">
-                            <button className="text-xs text-slate-500 flex items-center hover:text-primary-600 font-medium transition-colors">
-                                <History size={14} className="mr-1.5" /> Geçmiş kayıtları görüntüle
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Mobile Sticky Footer */}
-                <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-30 flex items-center justify-between gap-4">
-                    <div>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Net Süt</p>
-                        <p className="text-2xl font-black text-blue-600 leading-none">{netMilk.toFixed(1)} <span className="text-sm font-medium text-slate-400">L</span></p>
+                {/* Date Selector */}
+                <div className="flex items-center gap-2 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl p-2">
+                    <button
+                        onClick={() => changeDate(-1)}
+                        className="p-2 hover:bg-[var(--bg-elevated)] rounded-lg transition-colors"
+                    >
+                        <ChevronLeft size={20} className="text-[var(--text-secondary)]" />
+                    </button>
+                    <div className="flex items-center gap-2 px-4">
+                        <Calendar size={18} className="text-[var(--primary-400)]" />
+                        <input
+                            type="date"
+                            value={selectedDate}
+                            onChange={(e) => setSelectedDate(e.target.value)}
+                            className="bg-transparent text-[var(--text-primary)] font-medium outline-none"
+                        />
                     </div>
                     <button
-                        onClick={handleSaveAll}
-                        disabled={isSaved}
-                        className={`flex-1 py-3.5 rounded-xl font-bold text-white shadow-lg transition-all active:scale-[0.98] flex items-center justify-center space-x-2 ${isSaved
-                            ? 'bg-green-500 shadow-green-200'
-                            : 'bg-slate-900 shadow-slate-200'
-                            }`}
+                        onClick={() => changeDate(1)}
+                        className="p-2 hover:bg-[var(--bg-elevated)] rounded-lg transition-colors"
+                        disabled={selectedDate >= format(new Date(), 'yyyy-MM-dd')}
                     >
-                        {isSaved ? (
-                            <><Check size={18} /> <span>Kaydedildi</span></>
-                        ) : (
-                            <><Save size={18} /> <span>Tamamla</span></>
-                        )}
+                        <ChevronRight size={20} className="text-[var(--text-secondary)]" />
                     </button>
                 </div>
-
             </div>
+
+            {/* Summary Stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+                <div className="p-4 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl">
+                    <div className="flex items-center gap-2 text-[var(--warning)] mb-2">
+                        <Sun size={18} />
+                        <span className="text-sm font-medium">Sabah</span>
+                    </div>
+                    <div className="text-2xl font-bold text-[var(--text-primary)]">{totalMorning.toFixed(1)} L</div>
+                </div>
+                <div className="p-4 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl">
+                    <div className="flex items-center gap-2 text-[var(--primary-400)] mb-2">
+                        <Moon size={18} />
+                        <span className="text-sm font-medium">Akşam</span>
+                    </div>
+                    <div className="text-2xl font-bold text-[var(--text-primary)]">{totalEvening.toFixed(1)} L</div>
+                </div>
+                <div className="p-4 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl">
+                    <div className="flex items-center gap-2 text-[var(--accent)] mb-2">
+                        <Droplets size={18} />
+                        <span className="text-sm font-medium">Toplam</span>
+                    </div>
+                    <div className="text-2xl font-bold text-[var(--text-primary)]">{totalDaily.toFixed(1)} L</div>
+                </div>
+                <div className="p-4 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl">
+                    <div className="flex items-center gap-2 text-[var(--error)] mb-2">
+                        <Beef size={18} />
+                        <span className="text-sm font-medium">Buzağı</span>
+                    </div>
+                    <div className="text-2xl font-bold text-[var(--text-primary)]">{totalCalfConsumption.toFixed(1)} L</div>
+                </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex gap-2 mb-6">
+                <button
+                    onClick={() => setActiveTab('cows')}
+                    className={cn(
+                        'flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all',
+                        activeTab === 'cows'
+                            ? 'bg-gradient-to-r from-[var(--primary-600)] to-[var(--primary-500)] text-white'
+                            : 'bg-[var(--bg-card)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    )}
+                >
+                    <Droplets size={18} />
+                    İnekler ({cowEntries.length})
+                </button>
+                <button
+                    onClick={() => setActiveTab('calves')}
+                    className={cn(
+                        'flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all',
+                        activeTab === 'calves'
+                            ? 'bg-gradient-to-r from-[var(--primary-600)] to-[var(--primary-500)] text-white'
+                            : 'bg-[var(--bg-card)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    )}
+                >
+                    <Beef size={18} />
+                    Buzağılar ({calfEntries.length})
+                </button>
+            </div>
+
+            {/* Content */}
+            {activeTab === 'cows' ? (
+                <Card>
+                    <CardHeader
+                        title="Süt Üretimi"
+                        subtitle="Her inek için sabah ve akşam sütünü girin"
+                        action={
+                            <Button
+                                variant="primary"
+                                icon={Save}
+                                loading={saving}
+                                onClick={saveCowRecords}
+                            >
+                                {saveSuccess ? <CheckCircle2 size={18} /> : 'Kaydet'}
+                            </Button>
+                        }
+                    />
+
+                    {/* Cow List */}
+                    <div className="space-y-4">
+                        {/* Header */}
+                        <div className="grid grid-cols-12 gap-4 px-4 py-2 text-sm font-medium text-[var(--text-muted)]">
+                            <div className="col-span-4">İnek</div>
+                            <div className="col-span-3 text-center">Sabah</div>
+                            <div className="col-span-3 text-center">Akşam</div>
+                            <div className="col-span-2 text-right">Toplam</div>
+                        </div>
+
+                        {cowEntries.map((entry, index) => (
+                            <div
+                                key={entry.animal.id}
+                                className="grid grid-cols-12 gap-4 items-center p-4 bg-[var(--bg-secondary)] rounded-xl"
+                            >
+                                {/* Cow Info */}
+                                <div className="col-span-4 flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-[var(--bg-elevated)] flex items-center justify-center">
+                                        <Beef size={20} className="text-[var(--text-secondary)]" />
+                                    </div>
+                                    <div>
+                                        <div className="font-medium text-[var(--text-primary)]">
+                                            {entry.animal.name || entry.animal.ear_tag}
+                                        </div>
+                                        <div className="text-xs text-[var(--text-muted)]">{entry.animal.ear_tag}</div>
+                                    </div>
+                                </div>
+
+                                {/* Morning */}
+                                <div className="col-span-3">
+                                    <div className="flex items-center justify-center gap-2">
+                                        <button
+                                            onClick={() => handleCowMilkChange(index, 'morning', Math.max(0, entry.morning - 0.5))}
+                                            className="w-8 h-8 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] flex items-center justify-center transition-colors"
+                                        >
+                                            <Minus size={14} className="text-[var(--text-secondary)]" />
+                                        </button>
+                                        <input
+                                            type="number"
+                                            value={entry.morning || ''}
+                                            onChange={(e) => handleCowMilkChange(index, 'morning', parseFloat(e.target.value) || 0)}
+                                            className="w-16 text-center bg-[var(--bg-elevated)] rounded-lg py-2 text-[var(--text-primary)] font-medium outline-none focus:ring-2 focus:ring-[var(--primary-500)]"
+                                            step="0.5"
+                                            min="0"
+                                            placeholder="0"
+                                        />
+                                        <button
+                                            onClick={() => handleCowMilkChange(index, 'morning', entry.morning + 0.5)}
+                                            className="w-8 h-8 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] flex items-center justify-center transition-colors"
+                                        >
+                                            <Plus size={14} className="text-[var(--text-secondary)]" />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Evening */}
+                                <div className="col-span-3">
+                                    <div className="flex items-center justify-center gap-2">
+                                        <button
+                                            onClick={() => handleCowMilkChange(index, 'evening', Math.max(0, entry.evening - 0.5))}
+                                            className="w-8 h-8 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] flex items-center justify-center transition-colors"
+                                        >
+                                            <Minus size={14} className="text-[var(--text-secondary)]" />
+                                        </button>
+                                        <input
+                                            type="number"
+                                            value={entry.evening || ''}
+                                            onChange={(e) => handleCowMilkChange(index, 'evening', parseFloat(e.target.value) || 0)}
+                                            className="w-16 text-center bg-[var(--bg-elevated)] rounded-lg py-2 text-[var(--text-primary)] font-medium outline-none focus:ring-2 focus:ring-[var(--primary-500)]"
+                                            step="0.5"
+                                            min="0"
+                                            placeholder="0"
+                                        />
+                                        <button
+                                            onClick={() => handleCowMilkChange(index, 'evening', entry.evening + 0.5)}
+                                            className="w-8 h-8 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] flex items-center justify-center transition-colors"
+                                        >
+                                            <Plus size={14} className="text-[var(--text-secondary)]" />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Total */}
+                                <div className="col-span-2 text-right">
+                                    <span className="text-lg font-bold text-[var(--accent)]">
+                                        {(entry.morning + entry.evening).toFixed(1)} L
+                                    </span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Save Button (Mobile) */}
+                    <div className="mt-6 sm:hidden">
+                        <Button
+                            variant="primary"
+                            icon={Save}
+                            loading={saving}
+                            onClick={saveCowRecords}
+                            className="w-full"
+                        >
+                            {saveSuccess ? 'Kaydedildi!' : 'Tümünü Kaydet'}
+                        </Button>
+                    </div>
+                </Card>
+            ) : (
+                <Card>
+                    <CardHeader
+                        title="Buzağı Besleme"
+                        subtitle="Buzağılara verilen süt miktarları"
+                        action={
+                            <Button
+                                variant="primary"
+                                icon={Save}
+                                loading={saving}
+                                onClick={saveCalfRecords}
+                            >
+                                {saveSuccess ? <CheckCircle2 size={18} /> : 'Kaydet'}
+                            </Button>
+                        }
+                    />
+
+                    <div className="space-y-4">
+                        {calfEntries.length === 0 ? (
+                            <div className="text-center py-12 text-[var(--text-secondary)]">
+                                Henüz buzağı kaydı yok
+                            </div>
+                        ) : (
+                            calfEntries.map((entry, index) => (
+                                <div
+                                    key={entry.calf.id}
+                                    className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-xl"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-[var(--warning-bg)] flex items-center justify-center">
+                                            <Beef size={20} className="text-[var(--warning)]" />
+                                        </div>
+                                        <div>
+                                            <div className="font-medium text-[var(--text-primary)]">
+                                                {entry.calf.name || entry.calf.ear_tag}
+                                            </div>
+                                            <div className="text-xs text-[var(--text-muted)]">
+                                                Anne: {(entry.calf as any).mother?.name || 'Bilinmiyor'}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => handleCalfConsumptionChange(index, Math.max(0, entry.consumption - 0.5))}
+                                            className="w-10 h-10 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] flex items-center justify-center transition-colors"
+                                        >
+                                            <Minus size={16} className="text-[var(--text-secondary)]" />
+                                        </button>
+                                        <div className="w-20 text-center">
+                                            <input
+                                                type="number"
+                                                value={entry.consumption || ''}
+                                                onChange={(e) => handleCalfConsumptionChange(index, parseFloat(e.target.value) || 0)}
+                                                className="w-full text-center bg-[var(--bg-elevated)] rounded-lg py-2 text-[var(--text-primary)] font-bold text-lg outline-none focus:ring-2 focus:ring-[var(--primary-500)]"
+                                                step="0.5"
+                                                min="0"
+                                                placeholder="0"
+                                            />
+                                            <span className="text-xs text-[var(--text-muted)]">litre</span>
+                                        </div>
+                                        <button
+                                            onClick={() => handleCalfConsumptionChange(index, entry.consumption + 0.5)}
+                                            className="w-10 h-10 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] flex items-center justify-center transition-colors"
+                                        >
+                                            <Plus size={16} className="text-[var(--text-secondary)]" />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </Card>
+            )}
+
+            {/* Success Toast */}
+            {saveSuccess && (
+                <div className="fixed bottom-6 right-6 flex items-center gap-3 px-6 py-4 bg-[var(--success)] text-white rounded-xl shadow-lg animate-fadeIn">
+                    <CheckCircle2 size={20} />
+                    <span className="font-medium">Kayıt başarılı!</span>
+                </div>
+            )}
         </div>
     );
 };

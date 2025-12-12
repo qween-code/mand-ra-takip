@@ -1,568 +1,474 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// MANDIRA ASISTANI - LOGISTICS PAGE
+// Distribution and shipment management
+// ═══════════════════════════════════════════════════════════════════════════
+
 import React, { useState, useEffect } from 'react';
-import { Truck, Map, Building2, Save, Calendar, ChevronDown, ChevronUp, Plus, Search } from 'lucide-react';
+import { format } from 'date-fns';
+import { tr } from 'date-fns/locale';
+import {
+    Truck,
+    Plus,
+    Package,
+    MapPin,
+    User,
+    Clock,
+    CheckCircle2,
+    AlertCircle,
+    Navigation,
+    Store
+} from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { Card, CardHeader, Button, Badge, Modal, Input, Select, cn } from '../components/ui';
+import type { Shipment, Retailer, Region, ShipmentStatus } from '../types';
 
-// Types
-interface FarmerCollection {
-    id: string;
-    farmerId: string;
-    name: string;
-    amount: number;
-    temperature: number;
-    qualityOk: boolean;
-    collected: boolean;
+interface ShipmentWithDetails extends Shipment {
+    retailer?: Retailer & { region?: Region };
 }
 
-interface Seller {
-    id: string;
-    name: string;
-    distributed: number;
-    returned: number;
-}
+const statusLabels: Record<ShipmentStatus, string> = {
+    preparing: 'Hazırlanıyor',
+    in_transit: 'Yolda',
+    delivered: 'Teslim Edildi',
+    cancelled: 'İptal',
+};
 
-interface Region {
-    id: string;
-    name: string;
-    sellers: Seller[];
-}
+const statusColors: Record<ShipmentStatus, 'info' | 'warning' | 'success' | 'error'> = {
+    preparing: 'info',
+    in_transit: 'warning',
+    delivered: 'success',
+    cancelled: 'error',
+};
 
-const Logistics = () => {
-    const [activeTab, setActiveTab] = useState<'collection' | 'distribution' | 'factory'>('collection');
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-    const [loading, setLoading] = useState(true);
-
-    // Collection State
-    const [collections, setCollections] = useState<FarmerCollection[]>([]);
-    const [searchTerm, setSearchTerm] = useState('');
-
-    // Distribution State
+const Logistics: React.FC = () => {
+    const [shipments, setShipments] = useState<ShipmentWithDetails[]>([]);
+    const [retailers, setRetailers] = useState<Retailer[]>([]);
     const [regions, setRegions] = useState<Region[]>([]);
-    const [expandedRegions, setExpandedRegions] = useState<string[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [selectedShipment, setSelectedShipment] = useState<ShipmentWithDetails | null>(null);
 
-    // Factory State
-    const [factoryShipment, setFactoryShipment] = useState({
-        plate: '',
-        driver: '',
-        amount: '',
-        ph: '',
-        fat: '',
-        temperature: ''
+    // Form state
+    const [formData, setFormData] = useState({
+        retailer_id: '',
+        driver_name: '',
+        vehicle_plate: '',
+        notes: '',
     });
 
-    // Fetch Data
     useEffect(() => {
-        fetchData();
-    }, [date]);
+        loadData();
+    }, []);
 
-    const fetchData = async () => {
+    const loadData = async () => {
         setLoading(true);
         try {
-            await Promise.all([fetchCollections(), fetchDistributions()]);
+            // Load shipments with retailer info
+            const { data: shipmentData } = await supabase
+                .from('shipments')
+                .select(`
+          *,
+          retailer:retailers(*, region:regions(*))
+        `)
+                .order('date', { ascending: false });
+
+            setShipments(shipmentData || []);
+
+            // Load retailers
+            const { data: retailerData } = await supabase
+                .from('retailers')
+                .select('*')
+                .eq('is_active', true);
+
+            setRetailers(retailerData || []);
+
+            // Load regions
+            const { data: regionData } = await supabase
+                .from('regions')
+                .select('*')
+                .eq('is_active', true);
+
+            setRegions(regionData || []);
         } catch (error) {
-            console.error('Error fetching data:', error);
+            console.error('Error loading data:', error);
         } finally {
             setLoading(false);
         }
     };
 
-    const fetchCollections = async () => {
-        // Fetch farmers
-        const { data: farmers } = await supabase.from('farmers').select('*');
-        if (!farmers) return;
+    const handleCreateShipment = async () => {
+        try {
+            const shipmentNumber = `SHP-${format(new Date(), 'yyyyMMdd')}-${Date.now().toString().slice(-4)}`;
 
-        // Fetch today's collections
-        const { data: records } = await supabase
-            .from('milk_collections')
-            .select('*')
-            .eq('date', date);
-
-        const merged: FarmerCollection[] = farmers.map(farmer => {
-            const record = records?.find(r => r.farmer_id === farmer.id);
-            return {
-                id: record?.id || `temp-${farmer.id}`,
-                farmerId: farmer.id,
-                name: farmer.name,
-                amount: record?.amount || 0,
-                temperature: record?.temperature || 0,
-                qualityOk: record?.quality_ok ?? true,
-                collected: !!record
-            };
-        });
-
-        setCollections(merged);
-    };
-
-    const fetchDistributions = async () => {
-        // Fetch regions and sales points
-        const { data: regionsData } = await supabase.from('regions').select('*');
-        const { data: salesPoints } = await supabase.from('sales_points').select('*');
-
-        if (!regionsData || !salesPoints) return;
-
-        // Fetch today's distributions
-        const { data: distributions } = await supabase
-            .from('daily_distributions')
-            .select('*')
-            .eq('date', date);
-
-        const mergedRegions: Region[] = regionsData.map(region => {
-            const regionSellers = salesPoints.filter(sp => sp.region_id === region.id);
-
-            const sellers: Seller[] = regionSellers.map(sp => {
-                const dist = distributions?.find(d => d.sales_point_id === sp.id);
-                return {
-                    id: sp.id,
-                    name: sp.name,
-                    distributed: dist?.distributed_amount || 0,
-                    returned: dist?.returned_amount || 0
-                };
+            const { error } = await supabase.from('shipments').insert({
+                shipment_number: shipmentNumber,
+                date: format(new Date(), 'yyyy-MM-dd'),
+                retailer_id: formData.retailer_id,
+                driver_name: formData.driver_name || null,
+                vehicle_plate: formData.vehicle_plate || null,
+                status: 'preparing',
+                notes: formData.notes || null,
             });
 
-            return {
-                id: region.id,
-                name: region.name,
-                sellers
-            };
-        });
+            if (error) throw error;
 
-        setRegions(mergedRegions);
-        // Expand all by default
-        setExpandedRegions(mergedRegions.map(r => r.id));
-    };
-
-    // Collection Handlers
-    const handleCollectionChange = (farmerId: string, field: keyof FarmerCollection, value: any) => {
-        setCollections(prev => prev.map(c =>
-            c.farmerId === farmerId ? { ...c, [field]: value } : c
-        ));
-    };
-
-    const saveCollection = async (farmerId: string) => {
-        const collection = collections.find(c => c.farmerId === farmerId);
-        if (!collection) return;
-
-        const payload = {
-            farmer_id: farmerId,
-            date: date,
-            amount: Number(collection.amount),
-            temperature: Number(collection.temperature),
-            quality_ok: collection.qualityOk,
-            collected_at: new Date().toISOString()
-        };
-
-        // Check if exists by farmer_id and date (using upsert logic manually or via ID if we had it)
-        // Since we generated temp IDs, we should query by farmer_id + date or use upsert with constraint
-
-        const { error } = await supabase
-            .from('milk_collections')
-            .upsert(payload, { onConflict: 'farmer_id,date' });
-
-        if (error) {
-            console.error('Error saving collection:', error);
-            alert('Kayıt başarısız');
-        } else {
-            // Refresh to get real IDs
-            fetchCollections();
+            setShowCreateModal(false);
+            setFormData({ retailer_id: '', driver_name: '', vehicle_plate: '', notes: '' });
+            loadData();
+        } catch (error) {
+            console.error('Error creating shipment:', error);
         }
     };
 
-    // Distribution Handlers
-    const toggleRegion = (id: string) => {
-        setExpandedRegions(prev =>
-            prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]
+    const handleStatusChange = async (shipmentId: string, newStatus: ShipmentStatus) => {
+        try {
+            const updateData: Record<string, unknown> = { status: newStatus };
+
+            if (newStatus === 'in_transit') {
+                updateData.departure_time = new Date().toISOString();
+            } else if (newStatus === 'delivered') {
+                updateData.delivery_time = new Date().toISOString();
+            }
+
+            await supabase
+                .from('shipments')
+                .update(updateData)
+                .eq('id', shipmentId);
+
+            loadData();
+        } catch (error) {
+            console.error('Error updating status:', error);
+        }
+    };
+
+    const stats = {
+        total: shipments.length,
+        preparing: shipments.filter(s => s.status === 'preparing').length,
+        inTransit: shipments.filter(s => s.status === 'in_transit').length,
+        delivered: shipments.filter(s => s.status === 'delivered').length,
+    };
+
+    const todayShipments = shipments.filter(
+        s => s.date === format(new Date(), 'yyyy-MM-dd')
+    );
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-screen">
+                <div className="loading-spinner" />
+            </div>
         );
-    };
-
-    const handleDistributionChange = (regionId: string, sellerId: string, field: 'distributed' | 'returned', value: number) => {
-        setRegions(prev => prev.map(region => {
-            if (region.id !== regionId) return region;
-            return {
-                ...region,
-                sellers: region.sellers.map(seller =>
-                    seller.id === sellerId ? { ...seller, [field]: value } : seller
-                )
-            };
-        }));
-    };
-
-    const saveDistribution = async (sellerId: string, distributed: number, returned: number) => {
-        const payload = {
-            sales_point_id: sellerId,
-            date: date,
-            distributed_amount: distributed,
-            returned_amount: returned
-        };
-
-        const { error } = await supabase
-            .from('daily_distributions')
-            .upsert(payload, { onConflict: 'sales_point_id,date' });
-
-        if (error) {
-            console.error('Error saving distribution:', error);
-            alert('Kayıt başarısız');
-        }
-    };
-
-    // Factory Handlers
-    const handleFactorySubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        // Save to product_transfers as a shipment
-        const { error } = await supabase.from('product_transfers').insert({
-            date: date,
-            source_type: 'warehouse', // Assuming from warehouse
-            target_type: 'factory',
-            vehicle_plate: factoryShipment.plate,
-            driver_name: factoryShipment.driver,
-            quantity: Number(factoryShipment.amount),
-            product_id: '00000000-0000-0000-0000-000000000000', // Needs a valid product ID, using placeholder or we need to look up 'Raw Milk'
-            // For now, we'll just log it as we might not have a 'Raw Milk' product in products table
-            status: 'pending'
-        });
-
-        if (error) {
-            console.error('Error saving factory shipment:', error);
-            alert('Kayıt başarısız: ' + error.message);
-        } else {
-            alert('Fabrika çıkışı kaydedildi');
-            setFactoryShipment({ plate: '', driver: '', amount: '', ph: '', fat: '', temperature: '' });
-        }
-    };
-
-    // Calculations
-    const totalCollection = collections.reduce((sum, c) => sum + Number(c.amount || 0), 0);
-    const totalDistributed = regions.reduce((sum, r) => sum + r.sellers.reduce((s, seller) => s + Number(seller.distributed || 0), 0), 0);
-    const totalReturned = regions.reduce((sum, r) => sum + r.sellers.reduce((s, seller) => s + Number(seller.returned || 0), 0), 0);
-
-    if (loading) return <div className="p-6">Yükleniyor...</div>;
+    }
 
     return (
-        <div className="space-y-6">
+        <div className="page-content">
             {/* Header */}
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Lojistik Yönetimi</h1>
-                    <p className="text-gray-500">Süt toplama ve dağıtım operasyonları</p>
+                    <h1 className="text-2xl font-bold text-[var(--text-primary)]">Dağıtım & Lojistik</h1>
+                    <p className="text-[var(--text-secondary)] mt-1">Sevkiyatları ve teslimatları yönetin</p>
                 </div>
-                <div className="flex items-center gap-4">
-                    <div className="relative">
-                        <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                        <input
-                            type="date"
-                            value={date}
-                            onChange={(e) => setDate(e.target.value)}
-                            className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
+                <Button variant="primary" icon={Plus} onClick={() => setShowCreateModal(true)}>
+                    Yeni Sevkiyat
+                </Button>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+                <div className="p-4 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl">
+                    <div className="flex items-center gap-2 text-[var(--primary-400)] mb-2">
+                        <Package size={18} />
+                        <span className="text-sm font-medium">Toplam</span>
                     </div>
+                    <div className="text-2xl font-bold text-[var(--text-primary)]">{stats.total}</div>
+                </div>
+                <div className="p-4 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl">
+                    <div className="flex items-center gap-2 text-[var(--info)] mb-2">
+                        <Clock size={18} />
+                        <span className="text-sm font-medium">Hazırlanıyor</span>
+                    </div>
+                    <div className="text-2xl font-bold text-[var(--text-primary)]">{stats.preparing}</div>
+                </div>
+                <div className="p-4 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl">
+                    <div className="flex items-center gap-2 text-[var(--warning)] mb-2">
+                        <Truck size={18} />
+                        <span className="text-sm font-medium">Yolda</span>
+                    </div>
+                    <div className="text-2xl font-bold text-[var(--text-primary)]">{stats.inTransit}</div>
+                </div>
+                <div className="p-4 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl">
+                    <div className="flex items-center gap-2 text-[var(--success)] mb-2">
+                        <CheckCircle2 size={18} />
+                        <span className="text-sm font-medium">Teslim Edildi</span>
+                    </div>
+                    <div className="text-2xl font-bold text-[var(--text-primary)]">{stats.delivered}</div>
                 </div>
             </div>
 
-            {/* Tabs */}
-            <div className="flex gap-4 border-b border-gray-200">
-                <button
-                    onClick={() => setActiveTab('collection')}
-                    className={`pb-4 px-4 font-medium flex items-center gap-2 transition-colors relative ${activeTab === 'collection' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'
-                        }`}
-                >
-                    <Truck className="w-5 h-5" />
-                    Süt Toplama
-                    {activeTab === 'collection' && (
-                        <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600" />
-                    )}
-                </button>
-                <button
-                    onClick={() => setActiveTab('distribution')}
-                    className={`pb-4 px-4 font-medium flex items-center gap-2 transition-colors relative ${activeTab === 'distribution' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'
-                        }`}
-                >
-                    <Map className="w-5 h-5" />
-                    Bölge Dağıtımı
-                    {activeTab === 'distribution' && (
-                        <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600" />
-                    )}
-                </button>
-                <button
-                    onClick={() => setActiveTab('factory')}
-                    className={`pb-4 px-4 font-medium flex items-center gap-2 transition-colors relative ${activeTab === 'factory' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'
-                        }`}
-                >
-                    <Building2 className="w-5 h-5" />
-                    Fabrika
-                    {activeTab === 'factory' && (
-                        <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600" />
-                    )}
-                </button>
-            </div>
-
-            {/* Content */}
+            {/* Main Content Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Main Content */}
-                <div className="lg:col-span-2 space-y-6">
-                    {activeTab === 'collection' && (
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-                            <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-                                <h2 className="font-semibold text-gray-900">Müstahsil Listesi</h2>
-                                <div className="relative w-64">
-                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                                    <input
-                                        type="text"
-                                        placeholder="Müstahsil ara..."
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                                    />
+                {/* Retailers */}
+                <Card>
+                    <CardHeader
+                        title="Satış Noktaları"
+                        subtitle={`${retailers.length} aktif nokta`}
+                    />
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                        {retailers.length === 0 ? (
+                            <div className="text-center py-8 text-[var(--text-secondary)]">
+                                Satış noktası bulunamadı
+                            </div>
+                        ) : (
+                            retailers.map((retailer) => (
+                                <div
+                                    key={retailer.id}
+                                    className="flex items-center gap-3 p-3 bg-[var(--bg-secondary)] rounded-xl hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer"
+                                    onClick={() => {
+                                        setFormData({ ...formData, retailer_id: retailer.id });
+                                        setShowCreateModal(true);
+                                    }}
+                                >
+                                    <div className="w-10 h-10 rounded-lg bg-[var(--bg-elevated)] flex items-center justify-center">
+                                        <Store size={18} className="text-[var(--text-secondary)]" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="font-medium text-[var(--text-primary)] truncate">
+                                            {retailer.name}
+                                        </div>
+                                        <div className="text-xs text-[var(--text-muted)] truncate">
+                                            {retailer.address || retailer.contact_name || 'Adres yok'}
+                                        </div>
+                                    </div>
+                                    <Badge variant="default">{retailer.type}</Badge>
                                 </div>
-                            </div>
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead className="bg-gray-50">
-                                        <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Müstahsil</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Miktar (L)</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sıcaklık (°C)</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kalite</th>
-                                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-200">
-                                        {collections
-                                            .filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()))
-                                            .map((collection) => (
-                                                <tr key={collection.farmerId} className="hover:bg-gray-50">
-                                                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{collection.name}</td>
-                                                    <td className="px-6 py-4">
-                                                        <input
-                                                            type="number"
-                                                            value={collection.amount || ''}
-                                                            onChange={(e) => handleCollectionChange(collection.farmerId, 'amount', e.target.value)}
-                                                            className="w-24 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                                                        />
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <input
-                                                            type="number"
-                                                            value={collection.temperature || ''}
-                                                            onChange={(e) => handleCollectionChange(collection.farmerId, 'temperature', e.target.value)}
-                                                            className="w-20 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                                                        />
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <button
-                                                            onClick={() => handleCollectionChange(collection.farmerId, 'qualityOk', !collection.qualityOk)}
-                                                            className={`px-3 py-1 rounded-full text-xs font-medium ${collection.qualityOk
-                                                                ? 'bg-green-100 text-green-800'
-                                                                : 'bg-red-100 text-red-800'
-                                                                }`}
-                                                        >
-                                                            {collection.qualityOk ? 'Uygun' : 'Red'}
-                                                        </button>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-right">
-                                                        <button
-                                                            onClick={() => saveCollection(collection.farmerId)}
-                                                            className="text-blue-600 hover:text-blue-800"
-                                                        >
-                                                            <Save className="w-5 h-5" />
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                    </tbody>
-                                </table>
-                            </div>
+                            ))
+                        )}
+                    </div>
+                </Card>
+
+                {/* Today's Shipments */}
+                <Card className="lg:col-span-2">
+                    <CardHeader
+                        title="Bugünün Sevkiyatları"
+                        subtitle={format(new Date(), 'd MMMM yyyy', { locale: tr })}
+                    />
+                    {todayShipments.length === 0 ? (
+                        <div className="text-center py-12 text-[var(--text-secondary)]">
+                            <Truck size={48} className="mx-auto mb-4 opacity-30" />
+                            <p>Bugün için sevkiyat yok</p>
+                            <Button
+                                variant="secondary"
+                                className="mt-4"
+                                icon={Plus}
+                                onClick={() => setShowCreateModal(true)}
+                            >
+                                Sevkiyat Oluştur
+                            </Button>
                         </div>
-                    )}
-
-                    {activeTab === 'distribution' && (
+                    ) : (
                         <div className="space-y-4">
-                            {regions.map((region) => (
-                                <div key={region.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                                    <button
-                                        onClick={() => toggleRegion(region.id)}
-                                        className="w-full px-6 py-4 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
-                                    >
+                            {todayShipments.map((shipment) => (
+                                <div
+                                    key={shipment.id}
+                                    className="p-4 bg-[var(--bg-secondary)] rounded-xl"
+                                >
+                                    <div className="flex items-center justify-between mb-3">
                                         <div className="flex items-center gap-3">
-                                            <Map className="w-5 h-5 text-gray-400" />
-                                            <span className="font-semibold text-gray-900">{region.name}</span>
-                                            <span className="text-sm text-gray-500">({region.sellers.length} Nokta)</span>
+                                            <div className={cn(
+                                                'w-10 h-10 rounded-lg flex items-center justify-center',
+                                                shipment.status === 'preparing' && 'bg-[var(--info-bg)]',
+                                                shipment.status === 'in_transit' && 'bg-[var(--warning-bg)]',
+                                                shipment.status === 'delivered' && 'bg-[var(--success-bg)]',
+                                            )}>
+                                                <Truck
+                                                    size={20}
+                                                    className={cn(
+                                                        shipment.status === 'preparing' && 'text-[var(--info)]',
+                                                        shipment.status === 'in_transit' && 'text-[var(--warning)]',
+                                                        shipment.status === 'delivered' && 'text-[var(--success)]',
+                                                    )}
+                                                />
+                                            </div>
+                                            <div>
+                                                <div className="font-medium text-[var(--text-primary)]">
+                                                    {shipment.retailer?.name || 'Bilinmiyor'}
+                                                </div>
+                                                <div className="text-sm text-[var(--text-secondary)]">
+                                                    {shipment.shipment_number}
+                                                </div>
+                                            </div>
                                         </div>
-                                        {expandedRegions.includes(region.id) ? (
-                                            <ChevronUp className="w-5 h-5 text-gray-400" />
-                                        ) : (
-                                            <ChevronDown className="w-5 h-5 text-gray-400" />
-                                        )}
-                                    </button>
+                                        <Badge variant={statusColors[shipment.status]}>
+                                            {statusLabels[shipment.status]}
+                                        </Badge>
+                                    </div>
 
-                                    {expandedRegions.includes(region.id) && (
-                                        <div className="p-4">
-                                            <table className="w-full">
-                                                <thead>
-                                                    <tr className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                        <th className="pb-3">Satış Noktası</th>
-                                                        <th className="pb-3">Verilen (L)</th>
-                                                        <th className="pb-3">İade (L)</th>
-                                                        <th className="pb-3">Net (L)</th>
-                                                        <th className="pb-3"></th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-gray-100">
-                                                    {region.sellers.map((seller) => (
-                                                        <tr key={seller.id}>
-                                                            <td className="py-3 text-sm text-gray-900">{seller.name}</td>
-                                                            <td className="py-3">
-                                                                <input
-                                                                    type="number"
-                                                                    value={seller.distributed || ''}
-                                                                    onChange={(e) => handleDistributionChange(region.id, seller.id, 'distributed', Number(e.target.value))}
-                                                                    className="w-24 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                                                                />
-                                                            </td>
-                                                            <td className="py-3">
-                                                                <input
-                                                                    type="number"
-                                                                    value={seller.returned || ''}
-                                                                    onChange={(e) => handleDistributionChange(region.id, seller.id, 'returned', Number(e.target.value))}
-                                                                    className="w-24 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                                                                />
-                                                            </td>
-                                                            <td className="py-3 text-sm font-medium text-gray-900">
-                                                                {(seller.distributed || 0) - (seller.returned || 0)}
-                                                            </td>
-                                                            <td className="py-3 text-right">
-                                                                <button
-                                                                    onClick={() => saveDistribution(seller.id, seller.distributed, seller.returned)}
-                                                                    className="text-blue-600 hover:text-blue-800"
-                                                                >
-                                                                    <Save className="w-4 h-4" />
-                                                                </button>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )}
+                                    <div className="flex items-center gap-4 text-sm text-[var(--text-secondary)] mb-3">
+                                        {shipment.driver_name && (
+                                            <span className="flex items-center gap-1">
+                                                <User size={14} />
+                                                {shipment.driver_name}
+                                            </span>
+                                        )}
+                                        {shipment.vehicle_plate && (
+                                            <span className="flex items-center gap-1">
+                                                <Truck size={14} />
+                                                {shipment.vehicle_plate}
+                                            </span>
+                                        )}
+                                        {shipment.retailer?.address && (
+                                            <span className="flex items-center gap-1">
+                                                <MapPin size={14} />
+                                                {shipment.retailer.address}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="flex gap-2">
+                                        {shipment.status === 'preparing' && (
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                icon={Navigation}
+                                                onClick={() => handleStatusChange(shipment.id, 'in_transit')}
+                                            >
+                                                Yola Çık
+                                            </Button>
+                                        )}
+                                        {shipment.status === 'in_transit' && (
+                                            <Button
+                                                variant="success"
+                                                size="sm"
+                                                icon={CheckCircle2}
+                                                onClick={() => handleStatusChange(shipment.id, 'delivered')}
+                                            >
+                                                Teslim Et
+                                            </Button>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                         </div>
                     )}
+                </Card>
+            </div>
 
-                    {activeTab === 'factory' && (
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                            <h2 className="text-lg font-semibold text-gray-900 mb-6">Fabrika Çıkış Formu</h2>
-                            <form onSubmit={handleFactorySubmit} className="space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Araç Plakası</label>
-                                        <input
-                                            type="text"
-                                            value={factoryShipment.plate}
-                                            onChange={(e) => setFactoryShipment({ ...factoryShipment, plate: e.target.value })}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                            required
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Şoför Adı</label>
-                                        <input
-                                            type="text"
-                                            value={factoryShipment.driver}
-                                            onChange={(e) => setFactoryShipment({ ...factoryShipment, driver: e.target.value })}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                            required
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Miktar (L)</label>
-                                        <input
-                                            type="number"
-                                            value={factoryShipment.amount}
-                                            onChange={(e) => setFactoryShipment({ ...factoryShipment, amount: e.target.value })}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                            required
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">PH Değeri</label>
-                                        <input
-                                            type="number"
-                                            step="0.1"
-                                            value={factoryShipment.ph}
-                                            onChange={(e) => setFactoryShipment({ ...factoryShipment, ph: e.target.value })}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Yağ Oranı (%)</label>
-                                        <input
-                                            type="number"
-                                            step="0.1"
-                                            value={factoryShipment.fat}
-                                            onChange={(e) => setFactoryShipment({ ...factoryShipment, fat: e.target.value })}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Sıcaklık (°C)</label>
-                                        <input
-                                            type="number"
-                                            step="0.1"
-                                            value={factoryShipment.temperature}
-                                            onChange={(e) => setFactoryShipment({ ...factoryShipment, temperature: e.target.value })}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        />
-                                    </div>
-                                </div>
-                                <div className="flex justify-end">
-                                    <button
-                                        type="submit"
-                                        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-                                    >
-                                        <Save className="w-5 h-5" />
-                                        Kaydet
-                                    </button>
-                                </div>
-                            </form>
+            {/* All Shipments */}
+            <Card className="mt-6">
+                <CardHeader
+                    title="Tüm Sevkiyatlar"
+                    subtitle="Son 30 günlük sevkiyat geçmişi"
+                />
+                <div className="space-y-3">
+                    {shipments.length === 0 ? (
+                        <div className="text-center py-8 text-[var(--text-secondary)]">
+                            Sevkiyat kaydı bulunamadı
                         </div>
+                    ) : (
+                        shipments.slice(0, 10).map((shipment) => (
+                            <div
+                                key={shipment.id}
+                                className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-xl"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className={cn(
+                                        'w-12 h-12 rounded-xl flex items-center justify-center',
+                                        shipment.status === 'preparing' && 'bg-[var(--info-bg)]',
+                                        shipment.status === 'in_transit' && 'bg-[var(--warning-bg)]',
+                                        shipment.status === 'delivered' && 'bg-[var(--success-bg)]',
+                                        shipment.status === 'cancelled' && 'bg-[var(--error-bg)]',
+                                    )}>
+                                        <Truck
+                                            size={24}
+                                            className={cn(
+                                                shipment.status === 'preparing' && 'text-[var(--info)]',
+                                                shipment.status === 'in_transit' && 'text-[var(--warning)]',
+                                                shipment.status === 'delivered' && 'text-[var(--success)]',
+                                                shipment.status === 'cancelled' && 'text-[var(--error)]',
+                                            )}
+                                        />
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-medium text-[var(--text-primary)]">
+                                                {shipment.retailer?.name || 'Bilinmiyor'}
+                                            </span>
+                                            <Badge variant={statusColors[shipment.status]}>
+                                                {statusLabels[shipment.status]}
+                                            </Badge>
+                                        </div>
+                                        <div className="text-sm text-[var(--text-secondary)] flex items-center gap-3 mt-1">
+                                            <span>{shipment.shipment_number}</span>
+                                            <span>{format(new Date(shipment.date), 'd MMM yyyy', { locale: tr })}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    {shipment.total_amount > 0 && (
+                                        <div className="font-bold text-[var(--text-primary)]">
+                                            ₺{shipment.total_amount.toLocaleString('tr-TR')}
+                                        </div>
+                                    )}
+                                    {shipment.delivery_time && (
+                                        <div className="text-xs text-[var(--text-muted)]">
+                                            Teslim: {format(new Date(shipment.delivery_time), 'HH:mm')}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))
                     )}
                 </div>
+            </Card>
 
-                {/* Summary Sidebar */}
-                <div className="space-y-6">
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                        <h3 className="font-semibold text-gray-900 mb-4">Günlük Özet</h3>
-                        <div className="space-y-4">
-                            <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
-                                <span className="text-blue-700">Toplam Toplanan</span>
-                                <span className="font-bold text-blue-900">{totalCollection} L</span>
-                            </div>
-                            <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
-                                <span className="text-green-700">Toplam Dağıtılan</span>
-                                <span className="font-bold text-green-900">{totalDistributed} L</span>
-                            </div>
-                            <div className="flex justify-between items-center p-3 bg-red-50 rounded-lg">
-                                <span className="text-red-700">Toplam İade</span>
-                                <span className="font-bold text-red-900">{totalReturned} L</span>
-                            </div>
-                            <div className="border-t border-gray-200 pt-3 flex justify-between items-center">
-                                <span className="font-medium text-gray-900">Net Satış</span>
-                                <span className="font-bold text-gray-900">{totalDistributed - totalReturned} L</span>
-                            </div>
-                        </div>
+            {/* Create Modal */}
+            <Modal
+                isOpen={showCreateModal}
+                onClose={() => setShowCreateModal(false)}
+                title="Yeni Sevkiyat Oluştur"
+                size="md"
+            >
+                <div className="space-y-4">
+                    <Select
+                        label="Satış Noktası *"
+                        options={[
+                            { value: '', label: 'Seçin...' },
+                            ...retailers.map(r => ({ value: r.id, label: r.name }))
+                        ]}
+                        value={formData.retailer_id}
+                        onChange={(e) => setFormData({ ...formData, retailer_id: e.target.value })}
+                    />
+                    <div className="grid grid-cols-2 gap-4">
+                        <Input
+                            label="Şoför Adı"
+                            placeholder="Mehmet..."
+                            value={formData.driver_name}
+                            onChange={(e) => setFormData({ ...formData, driver_name: e.target.value })}
+                        />
+                        <Input
+                            label="Araç Plakası"
+                            placeholder="34 ABC 123"
+                            value={formData.vehicle_plate}
+                            onChange={(e) => setFormData({ ...formData, vehicle_plate: e.target.value })}
+                        />
                     </div>
-
-                    <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl shadow-lg p-6 text-white">
-                        <h3 className="font-semibold mb-2">Hızlı İşlemler</h3>
-                        <p className="text-blue-100 text-sm mb-4">
-                            Yeni müstahsil veya satış noktası eklemek için yönetim panelini kullanın.
-                        </p>
-                        <button className="w-full bg-white/10 hover:bg-white/20 transition-colors rounded-lg py-2 text-sm font-medium flex items-center justify-center gap-2">
-                            <Plus className="w-4 h-4" />
-                            Yeni Kayıt Ekle
-                        </button>
+                    <Input
+                        label="Notlar"
+                        placeholder="Sevkiyat notları..."
+                        value={formData.notes}
+                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    />
+                    <div className="flex justify-end gap-3 mt-6">
+                        <Button variant="secondary" onClick={() => setShowCreateModal(false)}>
+                            İptal
+                        </Button>
+                        <Button variant="primary" onClick={handleCreateShipment}>
+                            Oluştur
+                        </Button>
                     </div>
                 </div>
-            </div>
+            </Modal>
         </div>
     );
 };

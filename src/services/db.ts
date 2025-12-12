@@ -1,8 +1,49 @@
 import { supabase } from '../lib/supabase';
-import type { Cow, Calf } from '../types';
+import type { Cow, Calf, Database } from '../types';
 
-export const getTodayCows = async (): Promise<Cow[]> => {
-    const today = new Date().toISOString().split('T')[0];
+// --- Milk Tracking Helpers ---
+
+export const getTankStatus = async () => {
+    const { data } = await supabase.from('milk_tank').select('current_amount').single();
+    return data?.current_amount || 0;
+};
+
+export const processTransaction = async (
+    type: Database["public"]["Enums"]["milk_transaction_type"],
+    amount: number,
+    sourceType: Database["public"]["Enums"]["milk_source_type"],
+    sourceId: string | null,
+    relatedRecordId: string | null,
+    date: string
+) => {
+    // 1. Insert Transaction
+    const { error: txError } = await supabase.from('milk_transactions').insert({
+        type,
+        amount,
+        source_type: sourceType,
+        source_id: sourceId,
+        related_record_id: relatedRecordId,
+        date
+    });
+
+    if (txError) {
+        console.error('Error processing transaction:', txError);
+        return;
+    }
+
+    // 2. Update Tank
+    const { data: tank } = await supabase.from('milk_tank').select('id, current_amount').single();
+
+    if (tank) {
+        await supabase.from('milk_tank').update({
+            current_amount: Number(tank.current_amount) + amount,
+            updated_at: new Date().toISOString()
+        }).eq('id', tank.id);
+    }
+};
+
+export const getTodayCows = async (date?: string): Promise<Cow[]> => {
+    const targetDate = date || new Date().toISOString().split('T')[0];
 
     // Fetch cows
     const { data: cowsData, error: cowsError } = await supabase
@@ -15,11 +56,11 @@ export const getTodayCows = async (): Promise<Cow[]> => {
         return [];
     }
 
-    // Fetch today's milk records
+    // Fetch milk records for the target date
     const { data: milkData, error: milkError } = await supabase
         .from('milk_records')
         .select('*')
-        .eq('date', today);
+        .eq('date', targetDate);
 
     if (milkError) {
         console.error('Error fetching milk records:', milkError);
@@ -47,32 +88,54 @@ export const getTodayCows = async (): Promise<Cow[]> => {
     });
 };
 
-export const saveMilkRecord = async (id: string, session: 'morning' | 'evening', value: number) => {
-    const today = new Date().toISOString().split('T')[0];
+export const saveMilkRecord = async (id: string, session: 'morning' | 'evening', value: number, date?: string) => {
+    const recordDate = date || new Date().toISOString().split('T')[0];
 
     // Check if record exists
     const { data: existing } = await supabase
         .from('milk_records')
-        .select('id')
+        .select('id, quantity_liters')
         .eq('animal_id', id)
-        .eq('date', today)
+        .eq('date', recordDate)
         .eq('shift', session)
         .single();
 
+    let diff = 0;
+    let recordId = existing?.id;
+
     if (existing) {
+        diff = value - existing.quantity_liters;
+        if (diff === 0) return; // No change
+
         await supabase
             .from('milk_records')
             .update({ quantity_liters: value })
             .eq('id', existing.id);
     } else {
-        await supabase
+        diff = value;
+        const { data: newRecord } = await supabase
             .from('milk_records')
             .insert({
                 animal_id: id,
-                date: today,
+                date: recordDate,
                 shift: session,
                 quantity_liters: value
-            });
+            })
+            .select('id')
+            .single();
+        recordId = newRecord?.id;
+    }
+
+    // Process Transaction (Inflow)
+    if (diff !== 0 && recordId) {
+        await processTransaction(
+            'milking',
+            diff,
+            'cow',
+            id,
+            recordId,
+            recordDate
+        );
     }
 };
 
@@ -121,8 +184,8 @@ export const getCalves = async (): Promise<Calf[]> => {
     });
 };
 
-export const updateCalfConsumption = async (id: string, delta: number) => {
-    const today = new Date().toISOString().split('T')[0];
+export const updateCalfConsumption = async (id: string, delta: number, date?: string) => {
+    const today = date || new Date().toISOString().split('T')[0];
 
     // Get current consumption
     const { data: existing } = await supabase
@@ -135,6 +198,9 @@ export const updateCalfConsumption = async (id: string, delta: number) => {
 
     const currentAmount = existing?.quantity_liters || 0;
     const newAmount = Math.max(0, currentAmount + delta);
+    const actualDelta = newAmount - currentAmount;
+
+    let recordId = existing?.id;
 
     if (existing) {
         await supabase
@@ -142,14 +208,31 @@ export const updateCalfConsumption = async (id: string, delta: number) => {
             .update({ quantity_liters: newAmount })
             .eq('id', existing.id);
     } else {
-        await supabase
+        const { data: newRecord } = await supabase
             .from('milk_usage')
             .insert({
                 related_calf_id: id,
                 date: today,
                 usage_type: 'feeding',
                 quantity_liters: newAmount
-            });
+            })
+            .select('id')
+            .single();
+        recordId = newRecord?.id;
+    }
+
+    // Process Transaction (Outflow)
+    // Delta is positive when adding consumption (removing from tank)
+    // So amount should be negative of delta
+    if (actualDelta !== 0 && recordId) {
+        await processTransaction(
+            'feeding',
+            -actualDelta, // Negative because it reduces the tank
+            'cow',
+            id,
+            recordId,
+            today
+        );
     }
 };
 

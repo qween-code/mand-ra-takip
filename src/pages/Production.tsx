@@ -1,277 +1,350 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// MANDIRA ASISTANI - PRODUCTION PAGE
+// Production batch management with milk source traceability
+// ═══════════════════════════════════════════════════════════════════════════
+
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-import type { Database } from '../types/supabase';
-import { Card, Button, Input, Select, Modal, StatusBadge } from '../components/ui';
-import { Factory, Plus, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { clsx } from 'clsx';
+import {
+    Factory,
+    Plus,
+    Package,
+    Droplets,
+    Calendar,
+    CheckCircle2,
+    Clock,
+    AlertCircle,
+    Eye,
+    BarChart3
+} from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { Card, CardHeader, Button, Badge, Modal, Input, Select, cn } from '../components/ui';
+import type { Product, ProductionBatch, Animal, Supplier } from '../types';
 
-type ProductionBatch = Database['public']['Tables']['production_batches']['Row'];
+interface BatchWithDetails extends ProductionBatch {
+    product?: Product;
+}
+
+const statusLabels: Record<string, string> = {
+    planned: 'Planlandı',
+    in_progress: 'Üretiliyor',
+    completed: 'Tamamlandı',
+    cancelled: 'İptal',
+};
+
+const statusColors: Record<string, 'info' | 'warning' | 'success' | 'error'> = {
+    planned: 'info',
+    in_progress: 'warning',
+    completed: 'success',
+    cancelled: 'error',
+};
 
 const Production: React.FC = () => {
-    const [batches, setBatches] = useState<ProductionBatch[]>([]);
+    const [batches, setBatches] = useState<BatchWithDetails[]>([]);
+    const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
-    const [showAddModal, setShowAddModal] = useState(false);
-    const [filterStatus, setFilterStatus] = useState('');
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [selectedBatch, setSelectedBatch] = useState<BatchWithDetails | null>(null);
 
     // Form state
     const [formData, setFormData] = useState({
-        product_type: '',
+        product_id: '',
         milk_used_liters: '',
-        start_time: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+        quantity_produced: '',
+        notes: '',
     });
 
     useEffect(() => {
-        fetchBatches();
+        loadData();
     }, []);
 
-    const fetchBatches = async () => {
+    const loadData = async () => {
         setLoading(true);
         try {
-            const { data, error } = await supabase
+            // Load batches with product info
+            const { data: batchData } = await supabase
                 .from('production_batches')
-                .select('*')
-                .order('created_at', { ascending: false });
+                .select(`
+          *,
+          product:products(*)
+        `)
+                .order('production_date', { ascending: false });
 
-            if (error) throw error;
-            setBatches(data || []);
+            setBatches(batchData || []);
+
+            // Load products
+            const { data: productData } = await supabase
+                .from('products')
+                .select('*')
+                .eq('is_active', true);
+
+            setProducts(productData || []);
         } catch (error) {
-            console.error('Error fetching batches:', error);
+            console.error('Error loading data:', error);
         } finally {
             setLoading(false);
         }
     };
 
-    const generateBatchNumber = () => {
-        const date = format(new Date(), 'yyyyMMdd');
-        const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-        return `B${date}-${random}`;
-    };
-
-    const handleAddBatch = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleCreateBatch = async () => {
         try {
-            const { error } = await supabase.from('production_batches').insert([{
-                batch_number: generateBatchNumber(),
-                product_type: formData.product_type,
+            const batchNumber = `${formData.product_id.substring(0, 3).toUpperCase()}-${format(new Date(), 'yyyyMMdd')}-${Date.now().toString().slice(-3)}`;
+
+            const selectedProduct = products.find(p => p.id === formData.product_id);
+            const expiryDate = selectedProduct
+                ? format(new Date(Date.now() + selectedProduct.shelf_life_days * 24 * 60 * 60 * 1000), 'yyyy-MM-dd')
+                : null;
+
+            const { error } = await supabase.from('production_batches').insert({
+                batch_number: batchNumber,
+                product_id: formData.product_id,
+                production_date: format(new Date(), 'yyyy-MM-dd'),
                 milk_used_liters: parseFloat(formData.milk_used_liters),
-                start_time: formData.start_time,
+                quantity_produced: parseFloat(formData.quantity_produced),
+                expiry_date: expiryDate,
                 status: 'in_progress',
-            }]);
+            });
 
             if (error) throw error;
 
-            setShowAddModal(false);
+            setShowCreateModal(false);
             setFormData({
-                product_type: '',
+                product_id: '',
                 milk_used_liters: '',
-                start_time: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+                quantity_produced: '',
+                notes: '',
             });
-            fetchBatches();
+            loadData();
         } catch (error) {
             console.error('Error creating batch:', error);
-            alert('Parti oluşturulurken bir hata oluştu');
         }
     };
 
-    const handleCompleteBatch = async (batch: ProductionBatch) => {
-        const quantity = prompt('Üretilen miktar:');
-        const unit = prompt('Birim (Adet, Kg, Teneke):');
-
-        if (!quantity || !unit) return;
-
+    const handleStatusChange = async (batchId: string, newStatus: string) => {
         try {
-            const { error } = await supabase
+            await supabase
                 .from('production_batches')
-                .update({
-                    status: 'completed',
-                    end_time: new Date().toISOString(),
-                    output_quantity: parseFloat(quantity),
-                    output_unit: unit,
-                })
-                .eq('id', batch.id);
-
-            if (error) throw error;
-            fetchBatches();
+                .update({ status: newStatus })
+                .eq('id', batchId);
+            loadData();
         } catch (error) {
-            console.error('Error completing batch:', error);
+            console.error('Error updating status:', error);
         }
     };
 
-    const filteredBatches = batches.filter(batch => {
-        return !filterStatus || batch.status === filterStatus;
-    });
-
-    const productTypes = [
-        { value: 'yogurt', label: 'Yoğurt' },
-        { value: 'cheese', label: 'Peynir' },
-        { value: 'butter', label: 'Tereyağı' },
-        { value: 'cream', label: 'Krema' },
-        { value: 'ayran', label: 'Ayran' },
-    ];
-
-    const getProductTypeLabel = (type: string) => {
-        const found = productTypes.find(p => p.value === type);
-        return found ? found.label : type;
+    const stats = {
+        totalBatches: batches.length,
+        inProgress: batches.filter(b => b.status === 'in_progress').length,
+        completed: batches.filter(b => b.status === 'completed').length,
+        totalMilkUsed: batches.reduce((sum, b) => sum + (b.milk_used_liters || 0), 0),
     };
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center h-64">
-                <div className="animate-spin rounded-full h-12 w-12 border-2 border-indigo-600 border-t-transparent" />
+            <div className="flex items-center justify-center h-screen">
+                <div className="loading-spinner" />
             </div>
         );
     }
 
     return (
-        <div className="space-y-8">
-            {/* Page Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="page-content">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Üretim</h1>
-                    <p className="text-gray-500 mt-1">Süt ürünleri üretim takibi</p>
+                    <h1 className="text-2xl font-bold text-[var(--text-primary)]">Üretim</h1>
+                    <p className="text-[var(--text-secondary)] mt-1">Üretim partilerini yönetin</p>
                 </div>
-                <Button onClick={() => setShowAddModal(true)}>
-                    <Plus size={20} className="mr-2" />
-                    Yeni Parti
+                <Button variant="primary" icon={Plus} onClick={() => setShowCreateModal(true)}>
+                    Yeni Üretim
                 </Button>
             </div>
 
-            {/* Filter */}
+            {/* Stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+                <div className="p-4 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl">
+                    <div className="flex items-center gap-2 text-[var(--primary-400)] mb-2">
+                        <Package size={18} />
+                        <span className="text-sm font-medium">Toplam Parti</span>
+                    </div>
+                    <div className="text-2xl font-bold text-[var(--text-primary)]">{stats.totalBatches}</div>
+                </div>
+                <div className="p-4 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl">
+                    <div className="flex items-center gap-2 text-[var(--warning)] mb-2">
+                        <Clock size={18} />
+                        <span className="text-sm font-medium">Üretimde</span>
+                    </div>
+                    <div className="text-2xl font-bold text-[var(--text-primary)]">{stats.inProgress}</div>
+                </div>
+                <div className="p-4 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl">
+                    <div className="flex items-center gap-2 text-[var(--success)] mb-2">
+                        <CheckCircle2 size={18} />
+                        <span className="text-sm font-medium">Tamamlanan</span>
+                    </div>
+                    <div className="text-2xl font-bold text-[var(--text-primary)]">{stats.completed}</div>
+                </div>
+                <div className="p-4 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl">
+                    <div className="flex items-center gap-2 text-[var(--accent)] mb-2">
+                        <Droplets size={18} />
+                        <span className="text-sm font-medium">Kullanılan Süt</span>
+                    </div>
+                    <div className="text-2xl font-bold text-[var(--text-primary)]">{stats.totalMilkUsed.toFixed(0)} L</div>
+                </div>
+            </div>
+
+            {/* Products Grid */}
+            <div className="mb-8">
+                <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-4">Ürünler</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
+                    {products.map((product) => (
+                        <div
+                            key={product.id}
+                            className="p-4 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl hover:border-[var(--border-visible)] transition-colors cursor-pointer"
+                            onClick={() => {
+                                setFormData({ ...formData, product_id: product.id });
+                                setShowCreateModal(true);
+                            }}
+                        >
+                            <div className="text-2xl mb-2">
+                                {product.category === 'yogurt' ? '🥛' :
+                                    product.category === 'cheese' ? '🧀' :
+                                        product.category === 'butter' ? '🧈' :
+                                            product.category === 'ice_cream' ? '🍨' : '📦'}
+                            </div>
+                            <div className="font-medium text-[var(--text-primary)] text-sm">{product.name}</div>
+                            <div className="text-xs text-[var(--text-muted)] mt-1">
+                                Stok: {product.stock_quantity} {product.unit}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Batch List */}
             <Card>
-                <div className="flex gap-4">
-                    <Select
-                        value={filterStatus}
-                        onChange={setFilterStatus}
-                        options={[
-                            { value: 'planned', label: 'Planlandı' },
-                            { value: 'in_progress', label: 'Devam Ediyor' },
-                            { value: 'completed', label: 'Tamamlandı' },
-                            { value: 'failed', label: 'Başarısız' },
-                        ]}
-                        placeholder="Tüm Durumlar"
-                    />
+                <CardHeader
+                    title="Üretim Partileri"
+                    subtitle="Tüm üretim kayıtları"
+                />
+                <div className="space-y-4">
+                    {batches.length === 0 ? (
+                        <div className="text-center py-12 text-[var(--text-secondary)]">
+                            Henüz üretim kaydı yok
+                        </div>
+                    ) : (
+                        batches.map((batch) => (
+                            <div
+                                key={batch.id}
+                                className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-xl"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] flex items-center justify-center text-2xl">
+                                        {batch.product?.category === 'yogurt' ? '🥛' :
+                                            batch.product?.category === 'cheese' ? '🧀' :
+                                                batch.product?.category === 'butter' ? '🧈' :
+                                                    batch.product?.category === 'ice_cream' ? '🍨' : '📦'}
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-medium text-[var(--text-primary)]">
+                                                {batch.product?.name || 'Bilinmeyen Ürün'}
+                                            </span>
+                                            <Badge variant={statusColors[batch.status]}>
+                                                {statusLabels[batch.status]}
+                                            </Badge>
+                                        </div>
+                                        <div className="text-sm text-[var(--text-secondary)] flex items-center gap-3 mt-1">
+                                            <span className="flex items-center gap-1">
+                                                <Package size={12} />
+                                                {batch.batch_number}
+                                            </span>
+                                            <span className="flex items-center gap-1">
+                                                <Droplets size={12} />
+                                                {batch.milk_used_liters} L süt
+                                            </span>
+                                            <span className="flex items-center gap-1">
+                                                <Calendar size={12} />
+                                                {format(new Date(batch.production_date), 'd MMM', { locale: tr })}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="text-right">
+                                        <div className="font-bold text-[var(--text-primary)]">
+                                            {batch.quantity_produced} {batch.unit}
+                                        </div>
+                                        {batch.expiry_date && (
+                                            <div className="text-xs text-[var(--text-muted)]">
+                                                SKT: {format(new Date(batch.expiry_date), 'd MMM', { locale: tr })}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {batch.status === 'in_progress' && (
+                                        <Button
+                                            variant="success"
+                                            size="sm"
+                                            onClick={() => handleStatusChange(batch.id, 'completed')}
+                                        >
+                                            Tamamla
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+                        ))
+                    )}
                 </div>
             </Card>
 
-            {/* Batches Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredBatches.length === 0 ? (
-                    <div className="col-span-full text-center py-12 text-gray-500">
-                        Henüz üretim partisi yok
-                    </div>
-                ) : (
-                    filteredBatches.map((batch) => (
-                        <Card key={batch.id} className="hover:shadow-md transition-shadow">
-                            <div className="flex items-start justify-between mb-4">
-                                <div className="flex items-center gap-3">
-                                    <div className={clsx(
-                                        'w-12 h-12 rounded-xl flex items-center justify-center',
-                                        batch.status === 'completed' ? 'bg-green-100' :
-                                            batch.status === 'in_progress' ? 'bg-yellow-100' :
-                                                'bg-gray-100'
-                                    )}>
-                                        <Factory size={24} className={clsx(
-                                            batch.status === 'completed' ? 'text-green-600' :
-                                                batch.status === 'in_progress' ? 'text-yellow-600' :
-                                                    'text-gray-600'
-                                        )} />
-                                    </div>
-                                    <div>
-                                        <p className="font-semibold text-gray-900">{getProductTypeLabel(batch.product_type)}</p>
-                                        <p className="text-sm text-gray-500">{batch.batch_number}</p>
-                                    </div>
-                                </div>
-                                <StatusBadge status={batch.status || 'planned'} />
-                            </div>
-
-                            <div className="space-y-2 text-sm">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-500">Kullanılan Süt</span>
-                                    <span className="font-medium">{batch.milk_used_liters} L</span>
-                                </div>
-                                {batch.start_time && (
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-500">Başlangıç</span>
-                                        <span className="font-medium">
-                                            {format(new Date(batch.start_time), 'd MMM HH:mm', { locale: tr })}
-                                        </span>
-                                    </div>
-                                )}
-                                {batch.end_time && (
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-500">Bitiş</span>
-                                        <span className="font-medium">
-                                            {format(new Date(batch.end_time), 'd MMM HH:mm', { locale: tr })}
-                                        </span>
-                                    </div>
-                                )}
-                                {batch.output_quantity && (
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-500">Üretim</span>
-                                        <span className="font-semibold text-green-600">
-                                            {batch.output_quantity} {batch.output_unit}
-                                        </span>
-                                    </div>
-                                )}
-                            </div>
-
-                            {batch.status === 'in_progress' && (
-                                <div className="mt-4 pt-4 border-t border-gray-100">
-                                    <Button
-                                        variant="secondary"
-                                        size="sm"
-                                        className="w-full"
-                                        onClick={() => handleCompleteBatch(batch)}
-                                    >
-                                        <CheckCircle size={16} className="mr-2" />
-                                        Tamamla
-                                    </Button>
-                                </div>
-                            )}
-                        </Card>
-                    ))
-                )}
-            </div>
-
-            {/* Add Modal */}
+            {/* Create Modal */}
             <Modal
-                isOpen={showAddModal}
-                onClose={() => setShowAddModal(false)}
-                title="Yeni Üretim Partisi"
+                isOpen={showCreateModal}
+                onClose={() => setShowCreateModal(false)}
+                title="Yeni Üretim Başlat"
                 size="md"
-                footer={
-                    <div className="flex justify-end gap-3">
-                        <Button variant="secondary" onClick={() => setShowAddModal(false)}>İptal</Button>
-                        <Button onClick={handleAddBatch}>Başlat</Button>
-                    </div>
-                }
             >
-                <form className="space-y-4">
+                <div className="space-y-4">
                     <Select
-                        label="Ürün Tipi"
-                        value={formData.product_type}
-                        onChange={(value) => setFormData({ ...formData, product_type: value })}
-                        options={productTypes}
-                        placeholder="Ürün seçiniz"
+                        label="Ürün *"
+                        options={[
+                            { value: '', label: 'Ürün seçin...' },
+                            ...products.map(p => ({ value: p.id, label: p.name }))
+                        ]}
+                        value={formData.product_id}
+                        onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
                     />
+                    <div className="grid grid-cols-2 gap-4">
+                        <Input
+                            label="Kullanılan Süt (L) *"
+                            type="number"
+                            placeholder="100"
+                            value={formData.milk_used_liters}
+                            onChange={(e) => setFormData({ ...formData, milk_used_liters: e.target.value })}
+                        />
+                        <Input
+                            label="Üretilen Miktar *"
+                            type="number"
+                            placeholder="80"
+                            value={formData.quantity_produced}
+                            onChange={(e) => setFormData({ ...formData, quantity_produced: e.target.value })}
+                        />
+                    </div>
                     <Input
-                        label="Kullanılacak Süt (Litre)"
-                        type="number"
-                        step="0.1"
-                        value={formData.milk_used_liters}
-                        onChange={(e) => setFormData({ ...formData, milk_used_liters: e.target.value })}
-                        placeholder="Örn: 100"
-                        required
+                        label="Notlar"
+                        placeholder="Opsiyonel notlar..."
+                        value={formData.notes}
+                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                     />
-                    <Input
-                        label="Başlangıç Zamanı"
-                        type="datetime-local"
-                        value={formData.start_time}
-                        onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
-                    />
-                </form>
+                    <div className="flex justify-end gap-3 mt-6">
+                        <Button variant="secondary" onClick={() => setShowCreateModal(false)}>
+                            İptal
+                        </Button>
+                        <Button variant="primary" onClick={handleCreateBatch}>
+                            Üretimi Başlat
+                        </Button>
+                    </div>
+                </div>
             </Modal>
         </div>
     );

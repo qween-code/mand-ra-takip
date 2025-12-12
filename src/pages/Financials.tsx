@@ -1,393 +1,473 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// MANDIRA ASISTANI - FINANCIALS PAGE
+// Financial overview with sales and expenses
+// ═══════════════════════════════════════════════════════════════════════════
+
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-import type { Database } from '../types/supabase';
-import { Card, CardHeader, StatCard, Button, Input, Select, Modal, Table } from '../components/ui';
-import { Wallet, TrendingUp, TrendingDown, Plus, Calendar } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import {
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-    PieChart, Pie, Cell, Legend,
-} from 'recharts';
+    TrendingUp,
+    DollarSign,
+    ArrowUpRight,
+    ArrowDownRight,
+    Plus,
+    Receipt,
+    CreditCard,
+    Calendar,
+    BarChart3,
+    PieChart
+} from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { Card, CardHeader, Button, Badge, Modal, Input, Select, Tabs, cn } from '../components/ui';
+import type { Sale, Expense, ExpenseCategory } from '../types';
 
-type Expense = Database['public']['Tables']['expenses']['Row'];
+const categoryLabels: Record<ExpenseCategory, string> = {
+    feed: 'Yem',
+    veterinary: 'Veteriner',
+    fuel: 'Yakıt',
+    labor: 'İşçilik',
+    maintenance: 'Bakım',
+    utilities: 'Faturalar',
+    other: 'Diğer',
+};
 
-interface DailyData {
-    date: string;
-    income: number;
-    expense: number;
-}
-
-interface CategoryData {
-    category: string;
-    amount: number;
-}
-
-const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+const categoryColors: Record<ExpenseCategory, string> = {
+    feed: 'bg-green-500',
+    veterinary: 'bg-blue-500',
+    fuel: 'bg-yellow-500',
+    labor: 'bg-purple-500',
+    maintenance: 'bg-orange-500',
+    utilities: 'bg-cyan-500',
+    other: 'bg-gray-500',
+};
 
 const Financials: React.FC = () => {
+    const [sales, setSales] = useState<Sale[]>([]);
     const [expenses, setExpenses] = useState<Expense[]>([]);
     const [loading, setLoading] = useState(true);
-    const [showAddModal, setShowAddModal] = useState(false);
-
-    // Stats
-    const [totalIncome, setTotalIncome] = useState(0);
-    const [totalExpense, setTotalExpense] = useState(0);
-    const [dailyData, setDailyData] = useState<DailyData[]>([]);
-    const [categoryData, setCategoryData] = useState<CategoryData[]>([]);
-
-    // Date range
-    const [startDate, setStartDate] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
-    const [endDate, setEndDate] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+    const [activeTab, setActiveTab] = useState<'overview' | 'sales' | 'expenses'>('overview');
+    const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
+    const [showAddSaleModal, setShowAddSaleModal] = useState(false);
+    const [selectedMonth, setSelectedMonth] = useState(new Date());
 
     // Form state
-    const [formData, setFormData] = useState({
-        date: format(new Date(), 'yyyy-MM-dd'),
-        category: '',
+    const [expenseForm, setExpenseForm] = useState({
+        category: 'feed' as ExpenseCategory,
         amount: '',
         description: '',
+        paid_to: '',
+    });
+
+    const [saleForm, setSaleForm] = useState({
+        customer_name: '',
+        total_amount: '',
+        payment_status: 'pending',
+        payment_method: 'cash',
+        notes: '',
     });
 
     useEffect(() => {
-        fetchData();
-    }, [startDate, endDate]);
+        loadData();
+    }, [selectedMonth]);
 
-    const fetchData = async () => {
+    const loadData = async () => {
         setLoading(true);
         try {
-            // Fetch expenses
-            const { data: expensesData } = await supabase
-                .from('expenses')
-                .select('*')
-                .gte('date', startDate)
-                .lte('date', endDate)
-                .order('date', { ascending: false });
+            const monthStart = format(startOfMonth(selectedMonth), 'yyyy-MM-dd');
+            const monthEnd = format(endOfMonth(selectedMonth), 'yyyy-MM-dd');
 
-            // Fetch sales (income)
+            // Load sales
             const { data: salesData } = await supabase
                 .from('sales')
                 .select('*')
-                .gte('created_at', startDate)
-                .lte('created_at', endDate + 'T23:59:59');
+                .gte('date', monthStart)
+                .lte('date', monthEnd)
+                .order('date', { ascending: false });
+
+            setSales(salesData || []);
+
+            // Load expenses
+            const { data: expensesData } = await supabase
+                .from('expenses')
+                .select('*')
+                .gte('date', monthStart)
+                .lte('date', monthEnd)
+                .order('date', { ascending: false });
 
             setExpenses(expensesData || []);
-
-            // Calculate totals
-            const income = salesData?.reduce((sum, s) => sum + (s.total_amount || 0), 0) || 0;
-            const expense = expensesData?.reduce((sum, e) => sum + (e.amount || 0), 0) || 0;
-            setTotalIncome(income);
-            setTotalExpense(expense);
-
-            // Calculate daily data for charts
-            const dailyMap = new Map<string, { income: number; expense: number }>();
-
-            salesData?.forEach(sale => {
-                const date = format(new Date(sale.created_at), 'yyyy-MM-dd');
-                const current = dailyMap.get(date) || { income: 0, expense: 0 };
-                dailyMap.set(date, { ...current, income: current.income + sale.total_amount });
-            });
-
-            expensesData?.forEach(exp => {
-                const current = dailyMap.get(exp.date) || { income: 0, expense: 0 };
-                dailyMap.set(exp.date, { ...current, expense: current.expense + exp.amount });
-            });
-
-            const daily = Array.from(dailyMap.entries())
-                .map(([date, values]) => ({ date: format(new Date(date), 'd MMM', { locale: tr }), ...values }))
-                .sort((a, b) => a.date.localeCompare(b.date));
-            setDailyData(daily);
-
-            // Calculate category distribution
-            const categoryMap = new Map<string, number>();
-            expensesData?.forEach(exp => {
-                const current = categoryMap.get(exp.category) || 0;
-                categoryMap.set(exp.category, current + exp.amount);
-            });
-
-            const categories = Array.from(categoryMap.entries())
-                .map(([category, amount]) => ({ category: getCategoryLabel(category), amount }))
-                .sort((a, b) => b.amount - a.amount);
-            setCategoryData(categories);
-
         } catch (error) {
-            console.error('Error fetching data:', error);
+            console.error('Error loading data:', error);
         } finally {
             setLoading(false);
         }
     };
 
-    const handleAddExpense = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleAddExpense = async () => {
         try {
-            const { error } = await supabase.from('expenses').insert([{
-                date: formData.date,
-                category: formData.category,
-                amount: parseFloat(formData.amount),
-                description: formData.description || null,
-            }]);
+            await supabase.from('expenses').insert({
+                date: format(new Date(), 'yyyy-MM-dd'),
+                category: expenseForm.category,
+                amount: parseFloat(expenseForm.amount),
+                description: expenseForm.description,
+                paid_to: expenseForm.paid_to,
+            });
 
-            if (error) throw error;
-
-            setShowAddModal(false);
-            setFormData({ date: format(new Date(), 'yyyy-MM-dd'), category: '', amount: '', description: '' });
-            fetchData();
+            setShowAddExpenseModal(false);
+            setExpenseForm({ category: 'feed', amount: '', description: '', paid_to: '' });
+            loadData();
         } catch (error) {
             console.error('Error adding expense:', error);
-            alert('Gider eklenirken bir hata oluştu');
         }
     };
 
-    const getCategoryLabel = (category: string) => {
-        const categories: Record<string, string> = {
-            feed: 'Yem',
-            vet: 'Veteriner',
-            fuel: 'Yakıt',
-            staff: 'Personel',
-            maintenance: 'Bakım',
-            other: 'Diğer',
-        };
-        return categories[category] || category;
+    const handleAddSale = async () => {
+        try {
+            await supabase.from('sales').insert({
+                date: format(new Date(), 'yyyy-MM-dd'),
+                customer_name: saleForm.customer_name,
+                total_amount: parseFloat(saleForm.total_amount),
+                payment_status: saleForm.payment_status,
+                payment_method: saleForm.payment_method,
+                notes: saleForm.notes,
+            });
+
+            setShowAddSaleModal(false);
+            setSaleForm({ customer_name: '', total_amount: '', payment_status: 'pending', payment_method: 'cash', notes: '' });
+            loadData();
+        } catch (error) {
+            console.error('Error adding sale:', error);
+        }
     };
 
-    const expenseCategories = [
-        { value: 'feed', label: 'Yem' },
-        { value: 'vet', label: 'Veteriner' },
-        { value: 'fuel', label: 'Yakıt' },
-        { value: 'staff', label: 'Personel' },
-        { value: 'maintenance', label: 'Bakım' },
-        { value: 'other', label: 'Diğer' },
-    ];
+    // Calculate stats
+    const totalRevenue = sales.reduce((sum, s) => sum + (s.total_amount || 0), 0);
+    const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+    const netProfit = totalRevenue - totalExpenses;
+    const pendingSales = sales.filter(s => s.payment_status === 'pending').reduce((sum, s) => sum + (s.total_amount || 0), 0);
 
-    const netProfit = totalIncome - totalExpense;
+    // Expense breakdown by category
+    const expenseByCategory = expenses.reduce((acc, e) => {
+        acc[e.category] = (acc[e.category] || 0) + e.amount;
+        return acc;
+    }, {} as Record<string, number>);
 
-    const columns = [
-        {
-            key: 'date',
-            header: 'Tarih',
-            render: (expense: Expense) => format(new Date(expense.date), 'd MMMM yyyy', { locale: tr }),
-        },
-        {
-            key: 'category',
-            header: 'Kategori',
-            render: (expense: Expense) => getCategoryLabel(expense.category),
-        },
-        {
-            key: 'description',
-            header: 'Açıklama',
-            render: (expense: Expense) => expense.description || '-',
-        },
-        {
-            key: 'amount',
-            header: 'Tutar',
-            render: (expense: Expense) => (
-                <span className="font-semibold text-red-600">₺{expense.amount.toLocaleString('tr-TR')}</span>
-            ),
-        },
-    ];
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-screen">
+                <div className="loading-spinner" />
+            </div>
+        );
+    }
 
     return (
-        <div className="space-y-8">
-            {/* Page Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="page-content">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Finansal Analiz</h1>
-                    <p className="text-gray-500 mt-1">Gelir, gider ve kar takibi</p>
+                    <h1 className="text-2xl font-bold text-[var(--text-primary)]">Finans</h1>
+                    <p className="text-[var(--text-secondary)] mt-1">Gelir ve giderlerinizi takip edin</p>
                 </div>
-                <Button onClick={() => setShowAddModal(true)}>
-                    <Plus size={20} className="mr-2" />
-                    Gider Ekle
-                </Button>
+                <div className="flex gap-2">
+                    <Button variant="secondary" icon={Receipt} onClick={() => setShowAddExpenseModal(true)}>
+                        Gider Ekle
+                    </Button>
+                    <Button variant="primary" icon={Plus} onClick={() => setShowAddSaleModal(true)}>
+                        Satış Ekle
+                    </Button>
+                </div>
             </div>
 
-            {/* Date Filter */}
-            <Card>
-                <div className="flex flex-wrap items-center gap-4">
-                    <Calendar size={20} className="text-gray-400" />
-                    <Input
-                        type="date"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                        className="w-auto"
-                    />
-                    <span className="text-gray-400">-</span>
-                    <Input
-                        type="date"
-                        value={endDate}
-                        onChange={(e) => setEndDate(e.target.value)}
-                        className="w-auto"
-                    />
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                            setStartDate(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
-                            setEndDate(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
-                        }}
-                    >
-                        Bu Ay
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                            const lastMonth = subMonths(new Date(), 1);
-                            setStartDate(format(startOfMonth(lastMonth), 'yyyy-MM-dd'));
-                            setEndDate(format(endOfMonth(lastMonth), 'yyyy-MM-dd'));
-                        }}
-                    >
-                        Geçen Ay
-                    </Button>
+            {/* Month Selector */}
+            <div className="flex items-center gap-4 mb-8">
+                <button
+                    onClick={() => setSelectedMonth(subMonths(selectedMonth, 1))}
+                    className="p-2 hover:bg-[var(--bg-elevated)] rounded-lg transition-colors"
+                >
+                    ←
+                </button>
+                <div className="flex items-center gap-2 px-4 py-2 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl">
+                    <Calendar size={18} className="text-[var(--primary-400)]" />
+                    <span className="font-medium text-[var(--text-primary)]">
+                        {format(selectedMonth, 'MMMM yyyy', { locale: tr })}
+                    </span>
                 </div>
-            </Card>
+                <button
+                    onClick={() => setSelectedMonth(new Date())}
+                    className="px-3 py-2 text-sm bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] rounded-lg transition-colors text-[var(--text-secondary)]"
+                >
+                    Bu Ay
+                </button>
+            </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                <StatCard
-                    title="Toplam Gelir"
-                    value={`₺${totalIncome.toLocaleString('tr-TR')}`}
-                    icon={<TrendingUp size={24} />}
-                    color="green"
-                />
-                <StatCard
-                    title="Toplam Gider"
-                    value={`₺${totalExpense.toLocaleString('tr-TR')}`}
-                    icon={<TrendingDown size={24} />}
-                    color="red"
-                />
-                <StatCard
-                    title="Net Kar"
-                    value={`₺${netProfit.toLocaleString('tr-TR')}`}
-                    icon={<Wallet size={24} />}
-                    color={netProfit >= 0 ? 'indigo' : 'red'}
-                />
-            </div>
-
-            {/* Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Daily Income/Expense Chart */}
-                <Card>
-                    <CardHeader title="Günlük Gelir/Gider" subtitle="Seçili dönem analizi" />
-                    <div className="h-80">
-                        {dailyData.length > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={dailyData}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                    <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                                    <YAxis tick={{ fontSize: 12 }} />
-                                    <Tooltip
-                                        formatter={(value: number) => `₺${value.toLocaleString('tr-TR')}`}
-                                        contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
-                                    />
-                                    <Bar dataKey="income" name="Gelir" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                                    <Bar dataKey="expense" name="Gider" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        ) : (
-                            <div className="flex items-center justify-center h-full text-gray-500">
-                                Bu dönemde veri yok
-                            </div>
-                        )}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                <div className="p-6 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl">
+                    <div className="flex items-center justify-between mb-4">
+                        <span className="text-sm text-[var(--text-secondary)]">Toplam Gelir</span>
+                        <div className="w-10 h-10 rounded-lg bg-[var(--success-bg)] flex items-center justify-center">
+                            <TrendingUp size={20} className="text-[var(--success)]" />
+                        </div>
                     </div>
-                </Card>
-
-                {/* Expense Distribution Chart */}
-                <Card>
-                    <CardHeader title="Gider Dağılımı" subtitle="Kategoriye göre" />
-                    <div className="h-80">
-                        {categoryData.length > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={categoryData as any}
-                                        dataKey="amount"
-                                        nameKey="category"
-                                        cx="50%"
-                                        cy="50%"
-                                        outerRadius={100}
-                                        label={({ name, percent }) =>
-                                            `${name} ${((percent as number) * 100).toFixed(0)}%`
-                                        }
-                                    >
-                                        {categoryData.map((_, index) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip
-                                        formatter={(value: number) => `₺${value.toLocaleString('tr-TR')}`}
-                                        contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
-                                    />
-                                    <Legend />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        ) : (
-                            <div className="flex items-center justify-center h-full text-gray-500">
-                                Bu dönemde gider yok
-                            </div>
-                        )}
+                    <div className="text-2xl font-bold text-[var(--success)]">
+                        ₺{totalRevenue.toLocaleString('tr-TR')}
                     </div>
-                </Card>
-            </div>
-
-            {/* Expenses Table */}
-            <Card padding="none">
-                <div className="p-6 border-b border-gray-100">
-                    <CardHeader title="Gider Kayıtları" />
                 </div>
-                <Table
-                    data={expenses}
-                    columns={columns}
-                    keyExtractor={(expense) => expense.id}
-                    loading={loading}
-                    emptyMessage="Bu dönemde gider kaydı yok"
-                />
-            </Card>
+
+                <div className="p-6 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl">
+                    <div className="flex items-center justify-between mb-4">
+                        <span className="text-sm text-[var(--text-secondary)]">Toplam Gider</span>
+                        <div className="w-10 h-10 rounded-lg bg-[var(--error-bg)] flex items-center justify-center">
+                            <DollarSign size={20} className="text-[var(--error)]" />
+                        </div>
+                    </div>
+                    <div className="text-2xl font-bold text-[var(--error)]">
+                        ₺{totalExpenses.toLocaleString('tr-TR')}
+                    </div>
+                </div>
+
+                <div className="p-6 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl">
+                    <div className="flex items-center justify-between mb-4">
+                        <span className="text-sm text-[var(--text-secondary)]">Net Kar</span>
+                        <div className={cn(
+                            'w-10 h-10 rounded-lg flex items-center justify-center',
+                            netProfit >= 0 ? 'bg-[var(--success-bg)]' : 'bg-[var(--error-bg)]'
+                        )}>
+                            {netProfit >= 0 ? (
+                                <ArrowUpRight size={20} className="text-[var(--success)]" />
+                            ) : (
+                                <ArrowDownRight size={20} className="text-[var(--error)]" />
+                            )}
+                        </div>
+                    </div>
+                    <div className={cn(
+                        'text-2xl font-bold',
+                        netProfit >= 0 ? 'text-[var(--success)]' : 'text-[var(--error)]'
+                    )}>
+                        ₺{netProfit.toLocaleString('tr-TR')}
+                    </div>
+                </div>
+
+                <div className="p-6 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl">
+                    <div className="flex items-center justify-between mb-4">
+                        <span className="text-sm text-[var(--text-secondary)]">Bekleyen</span>
+                        <div className="w-10 h-10 rounded-lg bg-[var(--warning-bg)] flex items-center justify-center">
+                            <CreditCard size={20} className="text-[var(--warning)]" />
+                        </div>
+                    </div>
+                    <div className="text-2xl font-bold text-[var(--warning)]">
+                        ₺{pendingSales.toLocaleString('tr-TR')}
+                    </div>
+                </div>
+            </div>
+
+            {/* Main Content */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Sales List */}
+                <Card>
+                    <CardHeader
+                        title="Son Satışlar"
+                        subtitle={`${sales.length} kayıt`}
+                    />
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                        {sales.length === 0 ? (
+                            <div className="text-center py-8 text-[var(--text-secondary)]">
+                                Bu ay için satış kaydı yok
+                            </div>
+                        ) : (
+                            sales.map((sale) => (
+                                <div
+                                    key={sale.id}
+                                    className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-xl"
+                                >
+                                    <div>
+                                        <div className="font-medium text-[var(--text-primary)]">
+                                            {sale.customer_name || 'Genel Müşteri'}
+                                        </div>
+                                        <div className="text-sm text-[var(--text-secondary)]">
+                                            {format(new Date(sale.date), 'd MMM', { locale: tr })}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <Badge variant={sale.payment_status === 'paid' ? 'success' : 'warning'}>
+                                            {sale.payment_status === 'paid' ? 'Ödendi' : 'Bekliyor'}
+                                        </Badge>
+                                        <span className="font-bold text-[var(--success)]">
+                                            +₺{sale.total_amount.toLocaleString('tr-TR')}
+                                        </span>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </Card>
+
+                {/* Expenses List */}
+                <Card>
+                    <CardHeader
+                        title="Son Giderler"
+                        subtitle={`${expenses.length} kayıt`}
+                    />
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                        {expenses.length === 0 ? (
+                            <div className="text-center py-8 text-[var(--text-secondary)]">
+                                Bu ay için gider kaydı yok
+                            </div>
+                        ) : (
+                            expenses.map((expense) => (
+                                <div
+                                    key={expense.id}
+                                    className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-xl"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className={cn('w-3 h-3 rounded-full', categoryColors[expense.category])} />
+                                        <div>
+                                            <div className="font-medium text-[var(--text-primary)]">
+                                                {expense.description || categoryLabels[expense.category]}
+                                            </div>
+                                            <div className="text-sm text-[var(--text-secondary)]">
+                                                {expense.paid_to ? `${expense.paid_to} • ` : ''}
+                                                {format(new Date(expense.date), 'd MMM', { locale: tr })}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <span className="font-bold text-[var(--error)]">
+                                        -₺{expense.amount.toLocaleString('tr-TR')}
+                                    </span>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </Card>
+
+                {/* Expense Breakdown */}
+                <Card className="lg:col-span-2">
+                    <CardHeader
+                        title="Gider Dağılımı"
+                        subtitle="Kategorilere göre giderler"
+                    />
+                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
+                        {Object.entries(categoryLabels).map(([category, label]) => {
+                            const amount = expenseByCategory[category] || 0;
+                            const percentage = totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0;
+                            return (
+                                <div key={category} className="p-4 bg-[var(--bg-secondary)] rounded-xl text-center">
+                                    <div className={cn('w-4 h-4 rounded-full mx-auto mb-2', categoryColors[category as ExpenseCategory])} />
+                                    <div className="text-xs text-[var(--text-muted)] mb-1">{label}</div>
+                                    <div className="font-bold text-[var(--text-primary)] text-sm">
+                                        ₺{amount.toLocaleString('tr-TR')}
+                                    </div>
+                                    <div className="text-xs text-[var(--text-muted)]">{percentage.toFixed(0)}%</div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </Card>
+            </div>
 
             {/* Add Expense Modal */}
             <Modal
-                isOpen={showAddModal}
-                onClose={() => setShowAddModal(false)}
-                title="Yeni Gider Ekle"
+                isOpen={showAddExpenseModal}
+                onClose={() => setShowAddExpenseModal(false)}
+                title="Gider Ekle"
                 size="md"
-                footer={
-                    <div className="flex justify-end gap-3">
-                        <Button variant="secondary" onClick={() => setShowAddModal(false)}>İptal</Button>
-                        <Button onClick={handleAddExpense}>Kaydet</Button>
-                    </div>
-                }
             >
-                <form className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                        <Input
-                            label="Tarih"
-                            type="date"
-                            value={formData.date}
-                            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                            required
-                        />
-                        <Select
-                            label="Kategori"
-                            value={formData.category}
-                            onChange={(value) => setFormData({ ...formData, category: value })}
-                            options={expenseCategories}
-                            placeholder="Kategori seçiniz"
-                        />
-                    </div>
+                <div className="space-y-4">
+                    <Select
+                        label="Kategori *"
+                        options={Object.entries(categoryLabels).map(([value, label]) => ({ value, label }))}
+                        value={expenseForm.category}
+                        onChange={(e) => setExpenseForm({ ...expenseForm, category: e.target.value as ExpenseCategory })}
+                    />
                     <Input
-                        label="Tutar (₺)"
+                        label="Tutar (₺) *"
                         type="number"
-                        step="0.01"
-                        value={formData.amount}
-                        onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                        placeholder="Örn: 1500.00"
-                        required
+                        placeholder="1000"
+                        value={expenseForm.amount}
+                        onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
                     />
                     <Input
                         label="Açıklama"
-                        value={formData.description}
-                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                         placeholder="Gider açıklaması..."
+                        value={expenseForm.description}
+                        onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
                     />
-                </form>
+                    <Input
+                        label="Ödenen Kişi/Firma"
+                        placeholder="Örn: Yem Deposu"
+                        value={expenseForm.paid_to}
+                        onChange={(e) => setExpenseForm({ ...expenseForm, paid_to: e.target.value })}
+                    />
+                    <div className="flex justify-end gap-3 mt-6">
+                        <Button variant="secondary" onClick={() => setShowAddExpenseModal(false)}>
+                            İptal
+                        </Button>
+                        <Button variant="primary" onClick={handleAddExpense}>
+                            Ekle
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Add Sale Modal */}
+            <Modal
+                isOpen={showAddSaleModal}
+                onClose={() => setShowAddSaleModal(false)}
+                title="Satış Ekle"
+                size="md"
+            >
+                <div className="space-y-4">
+                    <Input
+                        label="Müşteri Adı"
+                        placeholder="Müşteri adı veya firma..."
+                        value={saleForm.customer_name}
+                        onChange={(e) => setSaleForm({ ...saleForm, customer_name: e.target.value })}
+                    />
+                    <Input
+                        label="Tutar (₺) *"
+                        type="number"
+                        placeholder="500"
+                        value={saleForm.total_amount}
+                        onChange={(e) => setSaleForm({ ...saleForm, total_amount: e.target.value })}
+                    />
+                    <div className="grid grid-cols-2 gap-4">
+                        <Select
+                            label="Ödeme Durumu"
+                            options={[
+                                { value: 'pending', label: 'Bekliyor' },
+                                { value: 'paid', label: 'Ödendi' },
+                                { value: 'partial', label: 'Kısmi' },
+                            ]}
+                            value={saleForm.payment_status}
+                            onChange={(e) => setSaleForm({ ...saleForm, payment_status: e.target.value })}
+                        />
+                        <Select
+                            label="Ödeme Yöntemi"
+                            options={[
+                                { value: 'cash', label: 'Nakit' },
+                                { value: 'credit', label: 'Veresiye' },
+                                { value: 'bank_transfer', label: 'Havale' },
+                                { value: 'other', label: 'Diğer' },
+                            ]}
+                            value={saleForm.payment_method}
+                            onChange={(e) => setSaleForm({ ...saleForm, payment_method: e.target.value })}
+                        />
+                    </div>
+                    <Input
+                        label="Notlar"
+                        placeholder="Satış notları..."
+                        value={saleForm.notes}
+                        onChange={(e) => setSaleForm({ ...saleForm, notes: e.target.value })}
+                    />
+                    <div className="flex justify-end gap-3 mt-6">
+                        <Button variant="secondary" onClick={() => setShowAddSaleModal(false)}>
+                            İptal
+                        </Button>
+                        <Button variant="primary" onClick={handleAddSale}>
+                            Ekle
+                        </Button>
+                    </div>
+                </div>
             </Modal>
         </div>
     );

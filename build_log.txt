@@ -1,0 +1,13 @@
+﻿src/components/animals/AnimalDetail.tsx(4,10): error TS6133: 'Button' is declared but its value is never read.
+src/components/animals/AnimalDetail.tsx(6,18): error TS6133: 'Utensils' is declared but its value is never read.
+src/components/animals/AnimalDetail.tsx(6,28): error TS6133: 'Milk' is declared but its value is never read.
+src/components/animals/AnimalDetail.tsx(7,26): error TS6133: 'DollarSign' is declared but its value is never read.
+src/components/animals/AnimalDetail.tsx(22,62): error TS6133: 'onClose' is declared but its value is never read.
+src/pages/Breeding.tsx(4,10): error TS6133: 'Card' is declared but its value is never read.
+src/pages/Breeding.tsx(4,53): error TS6133: 'StatusBadge' is declared but its value is never read.
+src/pages/Breeding.tsx(5,10): error TS6133: 'Baby' is declared but its value is never read.
+src/pages/Breeding.tsx(5,22): error TS6133: 'Search' is declared but its value is never read.
+src/pages/Breeding.tsx(5,30): error TS6133: 'Calendar' is declared but its value is never read.
+src/pages/Breeding.tsx(5,40): error TS6133: 'DollarSign' is declared but its value is never read.
+src/pages/Breeding.tsx(5,52): error TS6133: 'Activity' is declared but its value is never read.
+src/pages/MilkTracking.tsx(3,1): error TS6192: All imports in import declaration are unused.

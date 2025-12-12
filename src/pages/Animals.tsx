@@ -1,379 +1,481 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// MANDIRA ASISTANI - ANIMALS PAGE
+// Animal management with cows, calves, health records
+// ═══════════════════════════════════════════════════════════════════════════
+
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-import type { Database } from '../types/supabase';
-import { Card, Button, Input, Select, Modal, Table, StatusBadge } from '../components/ui';
-import { Beef, Plus, Search, Eye, Heart, Utensils, Milk } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import {
+    Beef,
+    Plus,
+    Search,
+    Filter,
+    Heart,
+    Syringe,
+    Baby,
+    Activity,
+    MoreVertical,
+    Edit,
+    Trash2,
+    Eye,
+    X,
+    Calendar,
+    Scale,
+    Tag
+} from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { Card, CardHeader, Button, Badge, Input, Select, Modal, Table, cn } from '../components/ui';
+import type { Animal, HealthRecord, AnimalType, AnimalStatus } from '../types';
 
-type Animal = Database['public']['Tables']['animals']['Row'];
-type HealthRecord = Database['public']['Tables']['health_records']['Row'];
-type FeedLog = Database['public']['Tables']['feed_logs']['Row'];
-type MilkRecord = Database['public']['Tables']['milk_records']['Row'];
+interface AnimalWithDetails extends Animal {
+    mother?: { name: string } | null;
+    health_records?: HealthRecord[];
+}
+
+const statusLabels: Record<AnimalStatus, string> = {
+    active: 'Aktif',
+    sold: 'Satıldı',
+    deceased: 'Öldü',
+    sick: 'Hasta',
+    dry: 'Kuru',
+};
+
+const statusColors: Record<AnimalStatus, 'success' | 'warning' | 'error' | 'info' | 'default'> = {
+    active: 'success',
+    sold: 'default',
+    deceased: 'error',
+    sick: 'warning',
+    dry: 'info',
+};
 
 const Animals: React.FC = () => {
-    const [animals, setAnimals] = useState<Animal[]>([]);
+    const [animals, setAnimals] = useState<AnimalWithDetails[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
-    const [filterType, setFilterType] = useState('');
+    const [filterType, setFilterType] = useState<AnimalType | 'all'>('all');
+    const [filterStatus, setFilterStatus] = useState<AnimalStatus | 'all'>('all');
+    const [selectedAnimal, setSelectedAnimal] = useState<AnimalWithDetails | null>(null);
     const [showAddModal, setShowAddModal] = useState(false);
-    const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
-    const [detailTab, setDetailTab] = useState<'health' | 'feed' | 'milk'>('health');
+    const [showDetailModal, setShowDetailModal] = useState(false);
 
-    // Detail data
-    const [healthRecords, setHealthRecords] = useState<HealthRecord[]>([]);
-    const [feedLogs, setFeedLogs] = useState<FeedLog[]>([]);
-    const [milkRecords, setMilkRecords] = useState<MilkRecord[]>([]);
-
-    // Form state
+    // Form state for adding new animal
     const [formData, setFormData] = useState({
-        tag_number: '',
+        ear_tag: '',
         name: '',
-        type: 'cow',
-        gender: 'female',
+        type: 'cow' as AnimalType,
+        gender: 'female' as 'male' | 'female',
         birth_date: '',
+        breed: '',
+        weight_kg: '',
         notes: '',
     });
 
     useEffect(() => {
-        fetchAnimals();
+        loadAnimals();
     }, []);
 
-    useEffect(() => {
-        if (selectedAnimal) {
-            fetchAnimalDetails(selectedAnimal.id);
-        }
-    }, [selectedAnimal, detailTab]);
-
-    const fetchAnimals = async () => {
+    const loadAnimals = async () => {
         setLoading(true);
         try {
             const { data, error } = await supabase
                 .from('animals')
-                .select('*')
+                .select(`
+          *,
+          mother:animals!mother_id(name)
+        `)
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
             setAnimals(data || []);
         } catch (error) {
-            console.error('Error fetching animals:', error);
+            console.error('Error loading animals:', error);
         } finally {
             setLoading(false);
         }
     };
 
-    const fetchAnimalDetails = async (animalId: string) => {
-        try {
-            if (detailTab === 'health') {
-                const { data } = await supabase
-                    .from('health_records')
-                    .select('*')
-                    .eq('animal_id', animalId)
-                    .order('date', { ascending: false });
-                setHealthRecords(data || []);
-            } else if (detailTab === 'feed') {
-                const { data } = await supabase
-                    .from('feed_logs')
-                    .select('*')
-                    .eq('animal_id', animalId)
-                    .order('date', { ascending: false });
-                setFeedLogs(data || []);
-            } else if (detailTab === 'milk') {
-                const { data } = await supabase
-                    .from('milk_records')
-                    .select('*')
-                    .eq('animal_id', animalId)
-                    .order('date', { ascending: false });
-                setMilkRecords(data || []);
-            }
-        } catch (error) {
-            console.error('Error fetching animal details:', error);
-        }
-    };
+    const filteredAnimals = animals.filter((animal) => {
+        const matchesSearch =
+            animal.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            animal.ear_tag.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesType = filterType === 'all' || animal.type === filterType;
+        const matchesStatus = filterStatus === 'all' || animal.status === filterStatus;
+        return matchesSearch && matchesType && matchesStatus;
+    });
 
-    const handleAddAnimal = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleAddAnimal = async () => {
         try {
-            const { error } = await supabase.from('animals').insert([{
-                tag_number: formData.tag_number,
+            const { error } = await supabase.from('animals').insert({
+                ear_tag: formData.ear_tag,
                 name: formData.name || null,
                 type: formData.type,
                 gender: formData.gender,
                 birth_date: formData.birth_date || null,
+                breed: formData.breed || null,
+                weight_kg: formData.weight_kg ? parseFloat(formData.weight_kg) : null,
                 notes: formData.notes || null,
                 status: 'active',
-            }]);
+            });
 
             if (error) throw error;
 
             setShowAddModal(false);
-            setFormData({ tag_number: '', name: '', type: 'cow', gender: 'female', birth_date: '', notes: '' });
-            fetchAnimals();
+            setFormData({
+                ear_tag: '',
+                name: '',
+                type: 'cow',
+                gender: 'female',
+                birth_date: '',
+                breed: '',
+                weight_kg: '',
+                notes: '',
+            });
+            loadAnimals();
         } catch (error) {
             console.error('Error adding animal:', error);
-            alert('Hayvan eklenirken bir hata oluştu');
         }
     };
 
-    const filteredAnimals = animals.filter(animal => {
-        const matchesSearch = animal.tag_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (animal.name?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
-        const matchesType = !filterType || animal.type === filterType;
-        return matchesSearch && matchesType;
-    });
+    const handleViewDetails = async (animal: AnimalWithDetails) => {
+        // Load health records for the animal
+        const { data: healthRecords } = await supabase
+            .from('health_records')
+            .select('*')
+            .eq('animal_id', animal.id)
+            .order('date', { ascending: false });
 
-    const animalTypeLabel = (type: string) => {
-        const types: Record<string, string> = { cow: 'İnek', calf: 'Buzağı', bull: 'Boğa' };
-        return types[type] || type;
+        setSelectedAnimal({ ...animal, health_records: healthRecords || [] });
+        setShowDetailModal(true);
     };
 
-    const columns = [
-        {
-            key: 'tag_number',
-            header: 'Küpe No',
-            render: (animal: Animal) => (
-                <span className="font-semibold text-gray-900">{animal.tag_number}</span>
-            ),
-        },
-        {
-            key: 'name',
-            header: 'İsim',
-            render: (animal: Animal) => animal.name || <span className="text-gray-400">-</span>,
-        },
-        {
-            key: 'type',
-            header: 'Tür',
-            render: (animal: Animal) => animalTypeLabel(animal.type),
-        },
-        {
-            key: 'gender',
-            header: 'Cinsiyet',
-            render: (animal: Animal) => animal.gender === 'female' ? 'Dişi' : 'Erkek',
-        },
-        {
-            key: 'status',
-            header: 'Durum',
-            render: (animal: Animal) => <StatusBadge status={animal.status || 'active'} />,
-        },
-        {
-            key: 'actions',
-            header: '',
-            render: (animal: Animal) => (
-                <Button variant="ghost" size="sm" onClick={() => setSelectedAnimal(animal)}>
-                    <Eye size={16} className="mr-1" />
-                    Detay
-                </Button>
-            ),
-        },
-    ];
+    const getAnimalAge = (birthDate: string | null): string => {
+        if (!birthDate) return 'Bilinmiyor';
+        const birth = new Date(birthDate);
+        const now = new Date();
+        const months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
+        if (months < 12) return `${months} ay`;
+        const years = Math.floor(months / 12);
+        const remainingMonths = months % 12;
+        return remainingMonths > 0 ? `${years} yıl ${remainingMonths} ay` : `${years} yıl`;
+    };
+
+    const stats = {
+        totalCows: animals.filter((a) => a.type === 'cow' && a.status === 'active').length,
+        totalCalves: animals.filter((a) => a.type === 'calf' && a.status === 'active').length,
+        totalBulls: animals.filter((a) => a.type === 'bull' && a.status === 'active').length,
+        sickAnimals: animals.filter((a) => a.status === 'sick').length,
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-screen">
+                <div className="loading-spinner" />
+            </div>
+        );
+    }
 
     return (
-        <div className="space-y-8">
-            {/* Page Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="page-content">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Hayvanlar</h1>
-                    <p className="text-gray-500 mt-1">Sürü yönetimi ve takibi</p>
+                    <h1 className="text-2xl font-bold text-[var(--text-primary)]">Hayvanlar</h1>
+                    <p className="text-[var(--text-secondary)] mt-1">Tüm hayvanlarınızı yönetin</p>
                 </div>
-                <Button onClick={() => setShowAddModal(true)}>
-                    <Plus size={20} className="mr-2" />
-                    Yeni Hayvan
+                <Button variant="primary" icon={Plus} onClick={() => setShowAddModal(true)}>
+                    Hayvan Ekle
                 </Button>
             </div>
 
-            {/* Filters */}
-            <Card>
-                <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="flex-1 relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                        <input
-                            type="text"
-                            placeholder="Küpe no veya isim ara..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500"
-                        />
+            {/* Stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+                <div className="p-4 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl">
+                    <div className="flex items-center gap-2 text-[var(--success)] mb-2">
+                        <Beef size={18} />
+                        <span className="text-sm font-medium">İnekler</span>
                     </div>
-                    <Select
-                        value={filterType}
-                        onChange={setFilterType}
-                        options={[
-                            { value: 'cow', label: 'İnekler' },
-                            { value: 'calf', label: 'Buzağılar' },
-                            { value: 'bull', label: 'Boğalar' },
-                        ]}
-                        placeholder="Tümü"
+                    <div className="text-2xl font-bold text-[var(--text-primary)]">{stats.totalCows}</div>
+                </div>
+                <div className="p-4 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl">
+                    <div className="flex items-center gap-2 text-[var(--warning)] mb-2">
+                        <Baby size={18} />
+                        <span className="text-sm font-medium">Buzağılar</span>
+                    </div>
+                    <div className="text-2xl font-bold text-[var(--text-primary)]">{stats.totalCalves}</div>
+                </div>
+                <div className="p-4 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl">
+                    <div className="flex items-center gap-2 text-[var(--info)] mb-2">
+                        <Beef size={18} />
+                        <span className="text-sm font-medium">Boğalar</span>
+                    </div>
+                    <div className="text-2xl font-bold text-[var(--text-primary)]">{stats.totalBulls}</div>
+                </div>
+                <div className="p-4 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl">
+                    <div className="flex items-center gap-2 text-[var(--error)] mb-2">
+                        <Heart size={18} />
+                        <span className="text-sm font-medium">Hasta</span>
+                    </div>
+                    <div className="text-2xl font-bold text-[var(--text-primary)]">{stats.sickAnimals}</div>
+                </div>
+            </div>
+
+            {/* Filters */}
+            <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                <div className="flex-1">
+                    <Input
+                        placeholder="Hayvan ara (isim veya kulak numarası)..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        icon={Search}
                     />
                 </div>
-            </Card>
+                <Select
+                    options={[
+                        { value: 'all', label: 'Tüm Türler' },
+                        { value: 'cow', label: 'İnekler' },
+                        { value: 'calf', label: 'Buzağılar' },
+                        { value: 'bull', label: 'Boğalar' },
+                    ]}
+                    value={filterType}
+                    onChange={(e) => setFilterType(e.target.value as AnimalType | 'all')}
+                />
+                <Select
+                    options={[
+                        { value: 'all', label: 'Tüm Durumlar' },
+                        { value: 'active', label: 'Aktif' },
+                        { value: 'sick', label: 'Hasta' },
+                        { value: 'dry', label: 'Kuru' },
+                        { value: 'sold', label: 'Satıldı' },
+                    ]}
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value as AnimalStatus | 'all')}
+                />
+            </div>
 
-            {/* Animals Table */}
-            <Table
-                data={filteredAnimals}
-                columns={columns}
-                keyExtractor={(animal) => animal.id}
-                loading={loading}
-                emptyMessage="Henüz hayvan kaydı yok"
-            />
+            {/* Animal List */}
+            <Card>
+                <div className="space-y-4">
+                    {filteredAnimals.length === 0 ? (
+                        <div className="text-center py-12 text-[var(--text-secondary)]">
+                            Hayvan bulunamadı
+                        </div>
+                    ) : (
+                        filteredAnimals.map((animal) => (
+                            <div
+                                key={animal.id}
+                                className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-xl hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer"
+                                onClick={() => handleViewDetails(animal)}
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div
+                                        className={cn(
+                                            'w-12 h-12 rounded-full flex items-center justify-center',
+                                            animal.type === 'cow' && 'bg-[var(--success-bg)]',
+                                            animal.type === 'calf' && 'bg-[var(--warning-bg)]',
+                                            animal.type === 'bull' && 'bg-[var(--info-bg)]'
+                                        )}
+                                    >
+                                        <Beef
+                                            size={24}
+                                            className={cn(
+                                                animal.type === 'cow' && 'text-[var(--success)]',
+                                                animal.type === 'calf' && 'text-[var(--warning)]',
+                                                animal.type === 'bull' && 'text-[var(--info)]'
+                                            )}
+                                        />
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-medium text-[var(--text-primary)]">
+                                                {animal.name || animal.ear_tag}
+                                            </span>
+                                            <Badge variant={statusColors[animal.status]}>
+                                                {statusLabels[animal.status]}
+                                            </Badge>
+                                        </div>
+                                        <div className="text-sm text-[var(--text-secondary)] flex items-center gap-3 mt-1">
+                                            <span className="flex items-center gap-1">
+                                                <Tag size={12} />
+                                                {animal.ear_tag}
+                                            </span>
+                                            {animal.breed && (
+                                                <span className="flex items-center gap-1">
+                                                    {animal.breed}
+                                                </span>
+                                            )}
+                                            <span className="flex items-center gap-1">
+                                                <Calendar size={12} />
+                                                {getAnimalAge(animal.birth_date)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {animal.type === 'calf' && animal.mother && (
+                                        <span className="text-sm text-[var(--text-muted)]">
+                                            Anne: {animal.mother.name}
+                                        </span>
+                                    )}
+                                    <button className="p-2 hover:bg-[var(--bg-hover)] rounded-lg transition-colors">
+                                        <Eye size={18} className="text-[var(--text-secondary)]" />
+                                    </button>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </Card>
 
             {/* Add Animal Modal */}
             <Modal
                 isOpen={showAddModal}
                 onClose={() => setShowAddModal(false)}
                 title="Yeni Hayvan Ekle"
-                size="lg"
-                footer={
-                    <div className="flex justify-end gap-3">
-                        <Button variant="secondary" onClick={() => setShowAddModal(false)}>İptal</Button>
-                        <Button onClick={handleAddAnimal}>Kaydet</Button>
-                    </div>
-                }
+                size="md"
             >
-                <form className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                        <Input
-                            label="Küpe Numarası"
-                            value={formData.tag_number}
-                            onChange={(e) => setFormData({ ...formData, tag_number: e.target.value })}
-                            placeholder="TR12345678"
-                            required
-                        />
-                        <Input
-                            label="İsim (Opsiyonel)"
-                            value={formData.name}
-                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                            placeholder="Örn: Sarıkız"
-                        />
-                    </div>
+                <div className="space-y-4">
+                    <Input
+                        label="Kulak Numarası *"
+                        placeholder="TR-34-XXX"
+                        value={formData.ear_tag}
+                        onChange={(e) => setFormData({ ...formData, ear_tag: e.target.value })}
+                    />
+                    <Input
+                        label="İsim"
+                        placeholder="Hayvan ismi"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    />
                     <div className="grid grid-cols-2 gap-4">
                         <Select
                             label="Tür"
-                            value={formData.type}
-                            onChange={(value) => setFormData({ ...formData, type: value })}
                             options={[
                                 { value: 'cow', label: 'İnek' },
                                 { value: 'calf', label: 'Buzağı' },
                                 { value: 'bull', label: 'Boğa' },
                             ]}
+                            value={formData.type}
+                            onChange={(e) => setFormData({ ...formData, type: e.target.value as AnimalType })}
                         />
                         <Select
                             label="Cinsiyet"
-                            value={formData.gender}
-                            onChange={(value) => setFormData({ ...formData, gender: value })}
                             options={[
                                 { value: 'female', label: 'Dişi' },
                                 { value: 'male', label: 'Erkek' },
                             ]}
+                            value={formData.gender}
+                            onChange={(e) => setFormData({ ...formData, gender: e.target.value as 'male' | 'female' })}
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <Input
+                            label="Doğum Tarihi"
+                            type="date"
+                            value={formData.birth_date}
+                            onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
+                        />
+                        <Input
+                            label="Irk"
+                            placeholder="Holstein, Simental..."
+                            value={formData.breed}
+                            onChange={(e) => setFormData({ ...formData, breed: e.target.value })}
                         />
                     </div>
                     <Input
-                        label="Doğum Tarihi"
-                        type="date"
-                        value={formData.birth_date}
-                        onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
+                        label="Ağırlık (kg)"
+                        type="number"
+                        placeholder="500"
+                        value={formData.weight_kg}
+                        onChange={(e) => setFormData({ ...formData, weight_kg: e.target.value })}
                     />
-                    <Input
-                        label="Notlar"
-                        value={formData.notes}
-                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                        placeholder="Ek bilgiler..."
-                    />
-                </form>
+                    <div className="flex justify-end gap-3 mt-6">
+                        <Button variant="secondary" onClick={() => setShowAddModal(false)}>
+                            İptal
+                        </Button>
+                        <Button variant="primary" onClick={handleAddAnimal}>
+                            Ekle
+                        </Button>
+                    </div>
+                </div>
             </Modal>
 
             {/* Animal Detail Modal */}
             <Modal
-                isOpen={!!selectedAnimal}
-                onClose={() => setSelectedAnimal(null)}
-                title={selectedAnimal ? `${selectedAnimal.tag_number} - ${selectedAnimal.name || 'İsimsiz'}` : ''}
-                size="xl"
+                isOpen={showDetailModal}
+                onClose={() => setShowDetailModal(false)}
+                title={selectedAnimal?.name || selectedAnimal?.ear_tag || 'Hayvan Detayı'}
+                size="lg"
             >
                 {selectedAnimal && (
                     <div className="space-y-6">
-                        {/* Animal Info */}
-                        <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
-                            <div className="w-16 h-16 rounded-xl bg-indigo-100 flex items-center justify-center">
-                                <Beef size={32} className="text-indigo-600" />
+                        {/* Basic Info */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                            <div className="p-4 bg-[var(--bg-secondary)] rounded-xl">
+                                <div className="text-sm text-[var(--text-muted)] mb-1">Kulak No</div>
+                                <div className="font-medium text-[var(--text-primary)]">{selectedAnimal.ear_tag}</div>
                             </div>
-                            <div className="flex-1">
-                                <p className="text-lg font-semibold text-gray-900">{selectedAnimal.tag_number}</p>
-                                <p className="text-gray-500">{animalTypeLabel(selectedAnimal.type)} • {selectedAnimal.gender === 'female' ? 'Dişi' : 'Erkek'}</p>
+                            <div className="p-4 bg-[var(--bg-secondary)] rounded-xl">
+                                <div className="text-sm text-[var(--text-muted)] mb-1">Tür</div>
+                                <div className="font-medium text-[var(--text-primary)] capitalize">{selectedAnimal.type}</div>
                             </div>
-                            <StatusBadge status={selectedAnimal.status || 'active'} />
+                            <div className="p-4 bg-[var(--bg-secondary)] rounded-xl">
+                                <div className="text-sm text-[var(--text-muted)] mb-1">Irk</div>
+                                <div className="font-medium text-[var(--text-primary)]">{selectedAnimal.breed || '-'}</div>
+                            </div>
+                            <div className="p-4 bg-[var(--bg-secondary)] rounded-xl">
+                                <div className="text-sm text-[var(--text-muted)] mb-1">Yaş</div>
+                                <div className="font-medium text-[var(--text-primary)]">{getAnimalAge(selectedAnimal.birth_date)}</div>
+                            </div>
                         </div>
 
-                        {/* Tabs */}
-                        <div className="flex border-b border-gray-200">
-                            {[
-                                { id: 'health', label: 'Sağlık', icon: Heart },
-                                { id: 'feed', label: 'Yem', icon: Utensils },
-                                { id: 'milk', label: 'Süt', icon: Milk },
-                            ].map((tab) => (
-                                <button
-                                    key={tab.id}
-                                    onClick={() => setDetailTab(tab.id as typeof detailTab)}
-                                    className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors ${detailTab === tab.id
-                                        ? 'border-indigo-500 text-indigo-600'
-                                        : 'border-transparent text-gray-500 hover:text-gray-700'
-                                        }`}
-                                >
-                                    <tab.icon size={18} />
-                                    {tab.label}
-                                </button>
-                            ))}
+                        {/* Health Records */}
+                        <div>
+                            <h4 className="text-lg font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
+                                <Syringe size={20} className="text-[var(--primary-400)]" />
+                                Sağlık Kayıtları
+                            </h4>
+                            {selectedAnimal.health_records && selectedAnimal.health_records.length > 0 ? (
+                                <div className="space-y-3">
+                                    {selectedAnimal.health_records.map((record) => (
+                                        <div key={record.id} className="p-4 bg-[var(--bg-secondary)] rounded-xl">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <Badge variant={record.record_type === 'vaccination' ? 'info' : 'warning'}>
+                                                    {record.record_type === 'vaccination' ? 'Aşı' :
+                                                        record.record_type === 'treatment' ? 'Tedavi' :
+                                                            record.record_type === 'checkup' ? 'Kontrol' : record.record_type}
+                                                </Badge>
+                                                <span className="text-sm text-[var(--text-muted)]">
+                                                    {format(new Date(record.date), 'd MMMM yyyy', { locale: tr })}
+                                                </span>
+                                            </div>
+                                            {record.medication && (
+                                                <p className="text-sm text-[var(--text-primary)]">
+                                                    İlaç: {record.medication}
+                                                </p>
+                                            )}
+                                            {record.notes && (
+                                                <p className="text-sm text-[var(--text-secondary)] mt-1">{record.notes}</p>
+                                            )}
+                                            {record.vet_name && (
+                                                <p className="text-xs text-[var(--text-muted)] mt-2">
+                                                    Veteriner: {record.vet_name}
+                                                </p>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-8 text-[var(--text-secondary)]">
+                                    Sağlık kaydı bulunamadı
+                                </div>
+                            )}
                         </div>
 
-                        {/* Tab Content */}
-                        <div className="max-h-64 overflow-y-auto">
-                            {detailTab === 'health' && (
-                                <div className="space-y-3">
-                                    {healthRecords.length === 0 ? (
-                                        <p className="text-gray-500 text-center py-4">Sağlık kaydı yok</p>
-                                    ) : (
-                                        healthRecords.map((record) => (
-                                            <div key={record.id} className="p-4 bg-gray-50 rounded-lg">
-                                                <p className="font-medium">{record.treatment_type}</p>
-                                                <p className="text-sm text-gray-500">{format(new Date(record.date), 'd MMMM yyyy', { locale: tr })}</p>
-                                                {record.description && <p className="text-sm text-gray-600 mt-1">{record.description}</p>}
-                                            </div>
-                                        ))
-                                    )}
-                                </div>
-                            )}
-                            {detailTab === 'feed' && (
-                                <div className="space-y-3">
-                                    {feedLogs.length === 0 ? (
-                                        <p className="text-gray-500 text-center py-4">Yem kaydı yok</p>
-                                    ) : (
-                                        feedLogs.map((log) => (
-                                            <div key={log.id} className="p-4 bg-gray-50 rounded-lg flex justify-between">
-                                                <div>
-                                                    <p className="font-medium">{log.feed_type}</p>
-                                                    <p className="text-sm text-gray-500">{format(new Date(log.date), 'd MMMM yyyy', { locale: tr })}</p>
-                                                </div>
-                                                <p className="font-semibold">{log.quantity} kg</p>
-                                            </div>
-                                        ))
-                                    )}
-                                </div>
-                            )}
-                            {detailTab === 'milk' && (
-                                <div className="space-y-3">
-                                    {milkRecords.length === 0 ? (
-                                        <p className="text-gray-500 text-center py-4">Süt kaydı yok</p>
-                                    ) : (
-                                        milkRecords.map((record) => (
-                                            <div key={record.id} className="p-4 bg-gray-50 rounded-lg flex justify-between">
-                                                <div>
-                                                    <p className="font-medium">{record.shift === 'morning' ? 'Sabah' : 'Akşam'}</p>
-                                                    <p className="text-sm text-gray-500">{format(new Date(record.date), 'd MMMM yyyy', { locale: tr })}</p>
-                                                </div>
-                                                <p className="font-semibold text-indigo-600">{record.quantity_liters} L</p>
-                                            </div>
-                                        ))
-                                    )}
-                                </div>
-                            )}
+                        <div className="flex justify-end gap-3">
+                            <Button variant="secondary" onClick={() => setShowDetailModal(false)}>
+                                Kapat
+                            </Button>
                         </div>
                     </div>
                 )}
