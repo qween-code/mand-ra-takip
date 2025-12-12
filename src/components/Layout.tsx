@@ -19,7 +19,8 @@ import {
     Users,
     Undo2,
     Droplets,
-    LogOut
+    LogOut,
+    DollarSign
 } from 'lucide-react';
 import { cn } from './ui';
 import { useAuth } from '../context/AuthContext';
@@ -32,22 +33,24 @@ interface NavItem {
 }
 
 const mainNavItems: NavItem[] = [
-    { path: '/', label: 'Gösterge Paneli', icon: LayoutDashboard },
+    { path: '/', label: 'Ana Sayfa', icon: LayoutDashboard },
+];
+
+const dailyNavItems: NavItem[] = [
     { path: '/milk', label: 'Süt Girişi', icon: Milk },
     { path: '/animals', label: 'Hayvanlar', icon: Beef },
+    { path: '/financials', label: 'Finans', icon: DollarSign },
 ];
 
 const managementNavItems: NavItem[] = [
-    { path: '/suppliers', label: 'Tedarikçiler', icon: Users, adminOnly: true },
     { path: '/production', label: 'Üretim', icon: Factory, adminOnly: true },
-    { path: '/distribution', label: 'Dağıtım', icon: Truck, adminOnly: true },
+    { path: '/suppliers', label: 'Tedarikçiler', icon: Users, adminOnly: true },
+    { path: '/distribution', label: 'Lojistik', icon: Truck, adminOnly: true },
     { path: '/returns', label: 'İadeler', icon: Undo2, adminOnly: true },
 ];
 
-const financeNavItems: NavItem[] = [
-    { path: '/sales', label: 'Satışlar', icon: ShoppingCart, adminOnly: true },
-    { path: '/financials', label: 'Finans', icon: TrendingUp, adminOnly: true },
-    { path: '/analytics', label: 'Analizler', icon: BarChart3, adminOnly: true },
+const reportNavItems: NavItem[] = [
+    { path: '/analytics', label: 'Raporlar', icon: BarChart3, adminOnly: true },
 ];
 
 const SidebarLink: React.FC<{ item: NavItem }> = ({ item }) => {
@@ -113,11 +116,14 @@ export const Layout: React.FC = () => {
                     ))}
                 </nav>
 
+                {/* Daily Operations */}
+                <SidebarSection title="Günlük İşlemler" items={dailyNavItems} />
+
                 {/* Management Section */}
                 <SidebarSection title="Yönetim" items={managementNavItems} />
 
-                {/* Finance Section */}
-                <SidebarSection title="Finans & Analiz" items={financeNavItems} />
+                {/* Reports Section */}
+                <SidebarSection title="Raporlar" items={reportNavItems} />
 
                 {/* Bottom Section */}
                 <div className="mt-auto pt-6 border-t border-[var(--border-subtle)]">

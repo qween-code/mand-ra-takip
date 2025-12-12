@@ -188,24 +188,43 @@ const Dashboard: React.FC = () => {
                 />
             </div>
 
-            {/* Quick Actions */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-                <Button variant="secondary" className="h-16 flex-col gap-2" onClick={() => window.location.href = '/milk'}>
-                    <Milk size={20} />
-                    <span className="text-sm">Süt Girişi</span>
-                </Button>
-                <Button variant="secondary" className="h-16 flex-col gap-2" onClick={() => window.location.href = '/animals'}>
-                    <Beef size={20} />
-                    <span className="text-sm">Hayvan Ekle</span>
-                </Button>
-                <Button variant="secondary" className="h-16 flex-col gap-2" onClick={() => window.location.href = '/production'}>
-                    <Factory size={20} />
-                    <span className="text-sm">Üretim Yap</span>
-                </Button>
-                <Button variant="secondary" className="h-16 flex-col gap-2" onClick={() => window.location.href = '/sales'}>
-                    <DollarSign size={20} />
-                    <span className="text-sm">Satış Ekle</span>
-                </Button>
+            {/* Quick Actions - Simplified & Prominent */}
+            <div className="mb-8">
+                <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-4">Hızlı İşlemler</h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <Button
+                        variant="primary"
+                        className="h-24 flex-col gap-3 text-lg hover:scale-105 transition-transform"
+                        onClick={() => window.location.href = '/milk'}
+                    >
+                        <Milk size={32} />
+                        <span>Süt Girişi</span>
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        className="h-24 flex-col gap-3 text-lg hover:bg-[var(--bg-elevated)] transition-colors"
+                        onClick={() => window.location.href = '/animals'}
+                    >
+                        <Beef size={32} />
+                        <span>Hayvan Ekle</span>
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        className="h-24 flex-col gap-3 text-lg hover:bg-[var(--bg-elevated)] transition-colors"
+                        onClick={() => window.location.href = '/sales'}
+                    >
+                        <DollarSign size={32} />
+                        <span>Satış Yap</span>
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        className="h-24 flex-col gap-3 text-lg hover:bg-[var(--bg-elevated)] transition-colors"
+                        onClick={() => window.location.href = '/financials'}
+                    >
+                        <TrendingUp size={32} />
+                        <span>Gider Ekle</span>
+                    </Button>
+                </div>
             </div>
 
             {/* Main Content Grid */}
