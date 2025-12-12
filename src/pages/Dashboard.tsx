@@ -148,252 +148,112 @@ const Dashboard: React.FC = () => {
         );
     }
 
-    return (
-        <div className="page-content">
-            {/* Page Header */}
-            <div className="mb-8">
-                <h1 className="text-2xl font-bold text-[var(--text-primary)]">Hoş Geldiniz 👋</h1>
-                <p className="text-[var(--text-secondary)] mt-1">
-                    {format(new Date(), "d MMMM yyyy, EEEE", { locale: tr })}
-                </p>
+    {/* Quick Actions - Top Priority */ }
+    <div className="grid grid-cols-2 gap-4 mb-8">
+        <Button
+            variant="primary"
+            className="h-32 flex-col gap-4 text-xl font-bold hover:scale-[1.02] transition-transform shadow-lg"
+            onClick={() => window.location.href = '/milk'}
+        >
+            <div className="p-4 rounded-full bg-white/20">
+                <Milk size={40} />
             </div>
-
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <StatCard
-                    title="Bugünkü Süt"
-                    value={`${stats.todayMilk.toFixed(1)} L`}
-                    icon={Milk}
-                    color="accent"
-                    change={{ value: 8.2, label: 'dün' }}
-                />
-                <StatCard
-                    title="Tank Dengesi"
-                    value={`${stats.tankBalance.toFixed(1)} L`}
-                    icon={Droplets}
-                    color="info"
-                />
-                <StatCard
-                    title="Aktif İnek"
-                    value={stats.activeCows}
-                    icon={Beef}
-                    color="success"
-                />
-                <StatCard
-                    title="Aylık Gelir"
-                    value={`₺${stats.monthlyRevenue.toLocaleString('tr-TR')}`}
-                    icon={TrendingUp}
-                    color="primary"
-                    change={{ value: 12.5, label: 'geçen ay' }}
-                />
+            <span>Süt Girişi</span>
+        </Button>
+        <Button
+            variant="secondary"
+            className="h-32 flex-col gap-4 text-xl font-bold hover:bg-[var(--bg-elevated)] transition-colors shadow-md"
+            onClick={() => window.location.href = '/animals'}
+        >
+            <div className="p-4 rounded-full bg-[var(--bg-secondary)]">
+                <Beef size={40} />
             </div>
+            <span>Hayvan Ekle</span>
+        </Button>
+        <Button
+            variant="secondary"
+            className="h-32 flex-col gap-4 text-xl font-bold hover:bg-[var(--bg-elevated)] transition-colors shadow-md"
+            onClick={() => window.location.href = '/sales'}
+        >
+            <div className="p-4 rounded-full bg-[var(--bg-secondary)]">
+                <DollarSign size={40} />
+            </div>
+            <span>Satış Yap</span>
+        </Button>
+        <Button
+            variant="secondary"
+            className="h-32 flex-col gap-4 text-xl font-bold hover:bg-[var(--bg-elevated)] transition-colors shadow-md"
+            onClick={() => window.location.href = '/financials'}
+        >
+            <div className="p-4 rounded-full bg-[var(--bg-secondary)]">
+                <TrendingUp size={40} />
+            </div>
+            <span>Gider Ekle</span>
+        </Button>
+    </div>
 
-            {/* Quick Actions - Simplified & Prominent */}
-            <div className="mb-8">
-                <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-4">Hızlı İşlemler</h2>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <Button
-                        variant="primary"
-                        className="h-24 flex-col gap-3 text-lg hover:scale-105 transition-transform"
-                        onClick={() => window.location.href = '/milk'}
-                    >
-                        <Milk size={32} />
-                        <span>Süt Girişi</span>
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        className="h-24 flex-col gap-3 text-lg hover:bg-[var(--bg-elevated)] transition-colors"
-                        onClick={() => window.location.href = '/animals'}
-                    >
-                        <Beef size={32} />
-                        <span>Hayvan Ekle</span>
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        className="h-24 flex-col gap-3 text-lg hover:bg-[var(--bg-elevated)] transition-colors"
-                        onClick={() => window.location.href = '/sales'}
-                    >
-                        <DollarSign size={32} />
-                        <span>Satış Yap</span>
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        className="h-24 flex-col gap-3 text-lg hover:bg-[var(--bg-elevated)] transition-colors"
-                        onClick={() => window.location.href = '/financials'}
-                    >
-                        <TrendingUp size={32} />
-                        <span>Gider Ekle</span>
-                    </Button>
+    {/* Key Stats - Simple & Clear */ }
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <Card className="p-6 flex items-center justify-between bg-gradient-to-br from-[var(--primary-900)] to-[var(--primary-800)] text-white border-none">
+            <div>
+                <p className="text-primary-100 mb-1">Bugünkü Süt</p>
+                <h3 className="text-4xl font-bold">{stats.todayMilk.toFixed(1)} L</h3>
+            </div>
+            <div className="p-3 rounded-xl bg-white/10">
+                <Milk size={32} />
+            </div>
+        </Card>
+
+        <Card className="p-6 flex items-center justify-between bg-[var(--bg-secondary)]">
+            <div>
+                <p className="text-[var(--text-secondary)] mb-1">Aktif Hayvan</p>
+                <h3 className="text-4xl font-bold text-[var(--text-primary)]">{stats.totalAnimals}</h3>
+            </div>
+            <div className="p-3 rounded-xl bg-[var(--bg-elevated)]">
+                <Beef size={32} className="text-[var(--primary-500)]" />
+            </div>
+        </Card>
+
+        <Card className="p-6 flex items-center justify-between bg-[var(--bg-secondary)]">
+            <div>
+                <p className="text-[var(--text-secondary)] mb-1">Bu Ay Ciro</p>
+                <h3 className="text-4xl font-bold text-[var(--success)]">₺{stats.monthlyRevenue.toLocaleString('tr-TR')}</h3>
+            </div>
+            <div className="p-3 rounded-xl bg-[var(--bg-elevated)]">
+                <TrendingUp size={32} className="text-[var(--success)]" />
+            </div>
+        </Card>
+    </div>
+
+    {/* Recent Activity - Simple List */ }
+    <Card>
+        <CardHeader title="Son Hareketler" />
+        <div className="divide-y divide-[var(--border-color)]">
+            {recentSales.length === 0 ? (
+                <div className="p-8 text-center text-[var(--text-secondary)]">
+                    Henüz işlem yok
                 </div>
-            </div>
-
-            {/* Main Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Milk Tank Status */}
-                <Card>
-                    <CardHeader
-                        title="Süt Tankı Durumu"
-                        subtitle="Bugünkü süt hareketleri"
-                    />
-                    {milkInventory ? (
-                        <div className="space-y-4">
-                            {/* Tank visualization */}
-                            <div className="relative h-40 bg-[var(--bg-secondary)] rounded-xl overflow-hidden">
-                                <div
-                                    className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[var(--accent)] to-[var(--accent-light)] transition-all duration-500"
-                                    style={{ height: `${Math.min(100, (milkInventory.closing_balance / 500) * 100)}%` }}
-                                />
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                    <div className="text-center">
-                                        <div className="text-3xl font-bold text-white drop-shadow-lg">
-                                            {milkInventory.closing_balance.toFixed(1)} L
-                                        </div>
-                                        <div className="text-sm text-white/70">Mevcut Miktar</div>
-                                    </div>
-                                </div>
+            ) : (
+                recentSales.map((sale) => (
+                    <div key={sale.id} className="p-4 flex items-center justify-between hover:bg-[var(--bg-secondary)] transition-colors">
+                        <div className="flex items-center gap-4">
+                            <div className="p-2 rounded-full bg-[var(--success-bg)] text-[var(--success)]">
+                                <DollarSign size={20} />
                             </div>
-
-                            {/* Flow details */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="p-4 bg-[var(--success-bg)] rounded-xl">
-                                    <div className="text-2xl font-bold text-[var(--success)]">
-                                        +{(milkInventory.total_produced + milkInventory.total_collected).toFixed(1)} L
-                                    </div>
-                                    <div className="text-sm text-[var(--text-secondary)]">Giriş (Üretim + Toplama)</div>
-                                </div>
-                                <div className="p-4 bg-[var(--error-bg)] rounded-xl">
-                                    <div className="text-2xl font-bold text-[var(--error)]">
-                                        -{(milkInventory.total_calf_consumed + milkInventory.total_production_used + milkInventory.total_sold).toFixed(1)} L
-                                    </div>
-                                    <div className="text-sm text-[var(--text-secondary)]">Çıkış (Tüketim + Üretim)</div>
-                                </div>
+                            <div>
+                                <p className="font-medium text-[var(--text-primary)]">Satış: {sale.customer_name || 'Müşteri'}</p>
+                                <p className="text-sm text-[var(--text-secondary)]">{format(new Date(sale.date), 'd MMMM HH:mm', { locale: tr })}</p>
                             </div>
                         </div>
-                    ) : (
-                        <div className="text-center py-8 text-[var(--text-secondary)]">
-                            Bugün için henüz veri yok
-                        </div>
-                    )}
-                </Card>
-
-                {/* Recent Sales */}
-                <Card>
-                    <CardHeader
-                        title="Son Satışlar"
-                        subtitle="En son 5 satış işlemi"
-                        action={
-                            <Button variant="ghost" size="sm" onClick={() => window.location.href = '/sales'}>
-                                Tümünü Gör <ArrowRight size={14} />
-                            </Button>
-                        }
-                    />
-                    <div className="space-y-3">
-                        {recentSales.length === 0 ? (
-                            <div className="text-center py-8 text-[var(--text-secondary)]">
-                                Henüz satış kaydı yok
-                            </div>
-                        ) : (
-                            recentSales.map((sale) => (
-                                <div
-                                    key={sale.id}
-                                    className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-xl hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer"
-                                >
-                                    <div>
-                                        <p className="font-medium text-[var(--text-primary)]">
-                                            {sale.customer_name || 'Genel Müşteri'}
-                                        </p>
-                                        <p className="text-sm text-[var(--text-secondary)]">
-                                            {format(new Date(sale.date), 'd MMM', { locale: tr })}
-                                        </p>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        <Badge variant={sale.payment_status === 'paid' ? 'success' : 'warning'}>
-                                            {sale.payment_status === 'paid' ? 'Ödendi' : 'Bekliyor'}
-                                        </Badge>
-                                        <span className="font-semibold text-[var(--text-primary)]">
-                                            ₺{sale.total_amount.toLocaleString('tr-TR')}
-                                        </span>
-                                    </div>
-                                </div>
-                            ))
-                        )}
+                        <span className="font-bold text-[var(--text-primary)]">
+                            +₺{sale.total_amount.toLocaleString('tr-TR')}
+                        </span>
                     </div>
-                </Card>
-
-                {/* Animal Overview */}
-                <Card>
-                    <CardHeader
-                        title="Hayvan Özeti"
-                        subtitle="Aktif hayvan durumu"
-                        action={
-                            <Button variant="ghost" size="sm" onClick={() => window.location.href = '/animals'}>
-                                Detay <ArrowRight size={14} />
-                            </Button>
-                        }
-                    />
-                    <div className="grid grid-cols-3 gap-4">
-                        <div className="p-4 bg-[var(--bg-secondary)] rounded-xl text-center">
-                            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--success-bg)] flex items-center justify-center">
-                                <Beef size={24} className="text-[var(--success)]" />
-                            </div>
-                            <div className="text-2xl font-bold text-[var(--text-primary)]">{stats.activeCows}</div>
-                            <div className="text-sm text-[var(--text-secondary)]">Aktif İnek</div>
-                        </div>
-                        <div className="p-4 bg-[var(--bg-secondary)] rounded-xl text-center">
-                            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--warning-bg)] flex items-center justify-center">
-                                <Beef size={24} className="text-[var(--warning)]" />
-                            </div>
-                            <div className="text-2xl font-bold text-[var(--text-primary)]">{stats.totalCalves}</div>
-                            <div className="text-sm text-[var(--text-secondary)]">Buzağı</div>
-                        </div>
-                        <div className="p-4 bg-[var(--bg-secondary)] rounded-xl text-center">
-                            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--info-bg)] flex items-center justify-center">
-                                <CheckCircle2 size={24} className="text-[var(--info)]" />
-                            </div>
-                            <div className="text-2xl font-bold text-[var(--text-primary)]">{stats.totalAnimals}</div>
-                            <div className="text-sm text-[var(--text-secondary)]">Toplam</div>
-                        </div>
-                    </div>
-                </Card>
-
-                {/* Financial Summary */}
-                <Card>
-                    <CardHeader
-                        title="Aylık Finans"
-                        subtitle={format(new Date(), 'MMMM yyyy', { locale: tr })}
-                    />
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between p-4 bg-[var(--success-bg)] rounded-xl">
-                            <div className="flex items-center gap-3">
-                                <TrendingUp size={20} className="text-[var(--success)]" />
-                                <span className="text-[var(--text-secondary)]">Gelir</span>
-                            </div>
-                            <span className="text-xl font-bold text-[var(--success)]">
-                                ₺{stats.monthlyRevenue.toLocaleString('tr-TR')}
-                            </span>
-                        </div>
-                        <div className="flex items-center justify-between p-4 bg-[var(--error-bg)] rounded-xl">
-                            <div className="flex items-center gap-3">
-                                <DollarSign size={20} className="text-[var(--error)]" />
-                                <span className="text-[var(--text-secondary)]">Gider</span>
-                            </div>
-                            <span className="text-xl font-bold text-[var(--error)]">
-                                ₺{stats.monthlyExpenses.toLocaleString('tr-TR')}
-                            </span>
-                        </div>
-                        <div className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-xl border-2 border-[var(--border-visible)]">
-                            <span className="font-medium text-[var(--text-primary)]">Net Kar</span>
-                            <span className={cn(
-                                'text-xl font-bold',
-                                stats.monthlyRevenue - stats.monthlyExpenses >= 0 ? 'text-[var(--success)]' : 'text-[var(--error)]'
-                            )}>
-                                ₺{(stats.monthlyRevenue - stats.monthlyExpenses).toLocaleString('tr-TR')}
-                            </span>
-                        </div>
-                    </div>
-                </Card>
-            </div>
+                ))
+            )}
         </div>
+    </Card>
+        </div >
     );
 };
 

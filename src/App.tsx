@@ -3,11 +3,13 @@
 // Main application with routing
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { Layout } from './components/Layout';
 
 // Pages
+import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import MilkEntry from './pages/MilkEntry';
 import Animals from './pages/Animals';
@@ -15,28 +17,48 @@ import Production from './pages/Production';
 import Financials from './pages/Financials';
 import Logistics from './pages/Logistics';
 import Suppliers from './pages/Suppliers';
+import SystemStatus from './pages/SystemStatus';
+
+const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const { user, loading } = useAuth();
+
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)]">
+                <div className="loading-spinner" />
+            </div>
+        );
+    }
+
+    if (!user) {
+        return <Navigate to="/login" />;
+    }
+
+    return <>{children}</>;
+};
 
 function App() {
     return (
         <AuthProvider>
             <BrowserRouter>
                 <Routes>
-                    <Route path="/" element={<Layout />}>
-                        <Route index element={<Dashboard />} />
-                        <Route path="milk" element={<MilkEntry />} />
-                        <Route path="animals" element={<Animals />} />
-                        <Route path="production" element={<Production />} />
-                        <Route path="financials" element={<Financials />} />
-                        <Route path="distribution" element={<Logistics />} />
-                        <Route path="logistics" element={<Logistics />} />
+                    <Route path="/login" element={<Login />} />
+                    <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+                        <Route path="/" element={<Dashboard />} />
+                        <Route path="/milk" element={<MilkEntry />} />
+                        <Route path="/animals" element={<Animals />} />
+                        <Route path="/production" element={<Production />} />
+                        <Route path="/financials" element={<Financials />} />
+                        <Route path="/logistics" element={<Logistics />} />
+                        <Route path="/suppliers" element={<Suppliers />} />
+                        <Route path="/system-status" element={<SystemStatus />} />
 
-                        {/* Placeholder routes - will be implemented */}
-                        <Route path="suppliers" element={<Suppliers />} />
-                        <Route path="returns" element={<ComingSoon title="İadeler" />} />
-                        <Route path="sales" element={<ComingSoon title="Satışlar" />} />
-                        <Route path="analytics" element={<ComingSoon title="Analizler" />} />
-                        <Route path="notifications" element={<ComingSoon title="Bildirimler" />} />
-                        <Route path="settings" element={<ComingSoon title="Ayarlar" />} />
+                        {/* Placeholder routes */}
+                        <Route path="/returns" element={<ComingSoon title="İadeler" />} />
+                        <Route path="/sales" element={<ComingSoon title="Satışlar" />} />
+                        <Route path="/analytics" element={<ComingSoon title="Analizler" />} />
+                        <Route path="/notifications" element={<ComingSoon title="Bildirimler" />} />
+                        <Route path="/settings" element={<ComingSoon title="Ayarlar" />} />
                     </Route>
                 </Routes>
             </BrowserRouter>
