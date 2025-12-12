@@ -85,17 +85,21 @@ const Financials: React.FC = () => {
                 .lte('date', monthEnd)
                 .order('date', { ascending: false });
 
-            setSales(salesData || []);
+            setSales((salesData as any[]) || []);
 
             // Load expenses
             const { data: expensesData } = await supabase
-                .from('expenses')
+                .from('financial_transactions' as any)
                 .select('*')
+                .eq('type', 'expense')
                 .gte('date', monthStart)
                 .lte('date', monthEnd)
                 .order('date', { ascending: false });
 
-            setExpenses(expensesData || []);
+            setExpenses((expensesData as any[])?.map(e => ({
+                ...e,
+                category: e.category as ExpenseCategory
+            })) || []);
         } catch (error) {
             console.error('Error loading data:', error);
         } finally {
@@ -105,8 +109,9 @@ const Financials: React.FC = () => {
 
     const handleAddExpense = async () => {
         try {
-            await supabase.from('expenses').insert({
+            await supabase.from('financial_transactions' as any).insert({
                 date: format(new Date(), 'yyyy-MM-dd'),
+                type: 'expense',
                 category: expenseForm.category,
                 amount: parseFloat(expenseForm.amount),
                 description: expenseForm.description,

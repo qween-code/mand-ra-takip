@@ -22,10 +22,10 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Card, CardHeader, Button, Badge, QuickNumberInput, cn } from '../components/ui';
-import type { Animal, DailyMilkProduction, CalfMilkConsumption } from '../types';
+import type { Cattle, Calf, DailyMilkProduction, CalfMilkConsumption } from '../types';
 
 interface CowMilkEntry {
-    animal: Animal;
+    animal: Cattle;
     morning: number;
     evening: number;
     morningRecordId: string | null;
@@ -33,7 +33,7 @@ interface CowMilkEntry {
 }
 
 interface CalfFeedingEntry {
-    calf: Animal;
+    calf: Calf;
     consumption: number;
     recordId: string | null;
 }
@@ -56,10 +56,10 @@ const MilkEntry: React.FC = () => {
         try {
             // Fetch active cows
             const { data: cows } = await supabase
-                .from('animals')
+                .from('cattle')
                 .select('*')
-                .eq('type', 'cow')
                 .eq('status', 'active')
+                .eq('gender', 'female') // Assuming only females produce milk
                 .order('name');
 
             // Fetch existing milk records for the date
@@ -89,9 +89,8 @@ const MilkEntry: React.FC = () => {
 
             // Fetch calves
             const { data: calves } = await supabase
-                .from('animals')
-                .select('*, mother:animals!mother_id(name)')
-                .eq('type', 'calf')
+                .from('calves')
+                .select('*, mother:cattle!mother_id(name)')
                 .eq('status', 'active')
                 .order('name');
 
@@ -104,7 +103,7 @@ const MilkEntry: React.FC = () => {
             const calfData: CalfFeedingEntry[] = (calves || []).map((calf) => {
                 const record = consumptionRecords?.find((r) => r.calf_id === calf.id);
                 return {
-                    calf,
+                    calf: calf,
                     consumption: record?.quantity_liters || 0,
                     recordId: record?.id || null,
                 };
@@ -375,9 +374,9 @@ const MilkEntry: React.FC = () => {
                                     </div>
                                     <div>
                                         <div className="font-medium text-[var(--text-primary)]">
-                                            {entry.animal.name || entry.animal.ear_tag}
+                                            {entry.animal.name || entry.animal.tag_number}
                                         </div>
-                                        <div className="text-xs text-[var(--text-muted)]">{entry.animal.ear_tag}</div>
+                                        <div className="text-xs text-[var(--text-muted)]">{entry.animal.tag_number}</div>
                                     </div>
                                 </div>
 
@@ -492,7 +491,7 @@ const MilkEntry: React.FC = () => {
                                         </div>
                                         <div>
                                             <div className="font-medium text-[var(--text-primary)]">
-                                                {entry.calf.name || entry.calf.ear_tag}
+                                                {entry.calf.name || entry.calf.tag_number}
                                             </div>
                                             <div className="text-xs text-[var(--text-muted)]">
                                                 Anne: {(entry.calf as any).mother?.name || 'Bilinmiyor'}

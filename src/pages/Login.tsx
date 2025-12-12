@@ -1,12 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Droplets } from 'lucide-react';
-import { Button, Card } from '../components/ui';
+import { Droplets, Loader2 } from 'lucide-react';
+import { Button, Card, Input } from '../components/ui';
 
 const Login: React.FC = () => {
     const { login, user } = useAuth();
     const navigate = useNavigate();
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     React.useEffect(() => {
         if (user) {
@@ -14,8 +18,17 @@ const Login: React.FC = () => {
         }
     }, [user, navigate]);
 
-    const handleLogin = () => {
-        login('Admin User', 'admin');
+    const handleLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError(null);
+
+        const { error } = await login(email, password);
+
+        if (error) {
+            setError(error.message || 'Giriş başarısız');
+            setLoading(false);
+        }
     };
 
     return (
@@ -29,18 +42,40 @@ const Login: React.FC = () => {
                     <p className="text-[var(--text-secondary)] mt-2">Süt Takip ve Yönetim Sistemi</p>
                 </div>
 
-                <div className="space-y-4">
+                <form onSubmit={handleLogin} className="space-y-4">
+                    <Input
+                        label="E-posta"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        placeholder="ornek@mandira.com"
+                    />
+                    <Input
+                        label="Şifre"
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        placeholder="••••••••"
+                    />
+
+                    {error && (
+                        <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg">
+                            {error}
+                        </div>
+                    )}
+
                     <Button
                         variant="primary"
                         className="w-full h-12 text-lg"
-                        onClick={handleLogin}
+                        type="submit"
+                        disabled={loading}
                     >
+                        {loading ? <Loader2 className="animate-spin mr-2" /> : null}
                         Giriş Yap
                     </Button>
-                    <p className="text-xs text-center text-[var(--text-muted)]">
-                        Geliştirme modu: Otomatik admin girişi
-                    </p>
-                </div>
+                </form>
             </Card>
         </div>
     );

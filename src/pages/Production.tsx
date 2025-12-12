@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Card, CardHeader, Button, Badge, Modal, Input, Select, cn } from '../components/ui';
-import type { Product, ProductionBatch, Animal, Supplier } from '../types';
+import type { Product, ProductionBatch, Supplier } from '../types';
 
 interface BatchWithDetails extends ProductionBatch {
     product?: Product;
@@ -47,6 +47,16 @@ const Production: React.FC = () => {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [selectedBatch, setSelectedBatch] = useState<BatchWithDetails | null>(null);
 
+    const [showProductModal, setShowProductModal] = useState(false);
+    const [productForm, setProductForm] = useState({
+        name: '',
+        category: 'yogurt',
+        unit: 'kg',
+        price_per_unit: '',
+        shelf_life_days: '',
+        min_stock_alert: '10'
+    });
+
     // Form state
     const [formData, setFormData] = useState({
         product_id: '',
@@ -64,22 +74,25 @@ const Production: React.FC = () => {
         try {
             // Load batches with product info
             const { data: batchData } = await supabase
-                .from('production_batches')
+                .from('production_batches' as any)
                 .select(`
           *,
           product:products(*)
         `)
                 .order('production_date', { ascending: false });
 
-            setBatches(batchData || []);
+            setBatches((batchData as any[])?.map(b => ({
+                ...b,
+                expiration_date: b.expiration_date || b.expiry_date // Handle potential DB column name mismatch if any, but prefer expiration_date
+            })) || []);
 
             // Load products
             const { data: productData } = await supabase
-                .from('products')
+                .from('products' as any)
                 .select('*')
                 .eq('is_active', true);
 
-            setProducts(productData || []);
+            setProducts((productData as unknown as Product[]) || []);
         } catch (error) {
             console.error('Error loading data:', error);
         } finally {
@@ -93,17 +106,18 @@ const Production: React.FC = () => {
 
             const selectedProduct = products.find(p => p.id === formData.product_id);
             const expiryDate = selectedProduct
-                ? format(new Date(Date.now() + selectedProduct.shelf_life_days * 24 * 60 * 60 * 1000), 'yyyy-MM-dd')
+                ? format(new Date(Date.now() + (selectedProduct.shelf_life_days || 30) * 24 * 60 * 60 * 1000), 'yyyy-MM-dd')
                 : null;
 
-            const { error } = await supabase.from('production_batches').insert({
+            const { error } = await supabase.from('production_batches' as any).insert({
                 batch_number: batchNumber,
                 product_id: formData.product_id,
-                production_date: format(new Date(), 'yyyy-MM-dd'),
+                start_date: format(new Date(), 'yyyy-MM-dd'),
                 milk_used_liters: parseFloat(formData.milk_used_liters),
                 quantity_produced: parseFloat(formData.quantity_produced),
-                expiry_date: expiryDate,
+                expiration_date: expiryDate,
                 status: 'in_progress',
+                unit: selectedProduct?.unit || 'adet'
             });
 
             if (error) throw error;
@@ -118,6 +132,36 @@ const Production: React.FC = () => {
             loadData();
         } catch (error) {
             console.error('Error creating batch:', error);
+        }
+    };
+
+    const handleAddProduct = async () => {
+        try {
+            const { error } = await supabase.from('products').insert({
+                name: productForm.name,
+                category: productForm.category,
+                unit: productForm.unit,
+                price_per_unit: parseFloat(productForm.price_per_unit),
+                shelf_life_days: parseInt(productForm.shelf_life_days),
+                min_stock_alert: parseInt(productForm.min_stock_alert),
+                stock_quantity: 0,
+                is_active: true
+            });
+
+            if (error) throw error;
+
+            setShowProductModal(false);
+            setProductForm({
+                name: '',
+                category: 'yogurt',
+                unit: 'kg',
+                price_per_unit: '',
+                shelf_life_days: '',
+                min_stock_alert: '10'
+            });
+            loadData();
+        } catch (error) {
+            console.error('Error adding product:', error);
         }
     };
 
@@ -154,11 +198,16 @@ const Production: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
                 <div>
                     <h1 className="text-2xl font-bold text-[var(--text-primary)]">Üretim</h1>
-                    <p className="text-[var(--text-secondary)] mt-1">Üretim partilerini yönetin</p>
+                    <p className="text-[var(--text-secondary)] mt-1">Üretim partilerini ve ürünleri yönetin</p>
                 </div>
-                <Button variant="primary" icon={Plus} onClick={() => setShowCreateModal(true)}>
-                    Yeni Üretim
-                </Button>
+                <div className="flex gap-2">
+                    <Button variant="secondary" icon={Package} onClick={() => setShowProductModal(true)}>
+                        Ürün Ekle
+                    </Button>
+                    <Button variant="primary" icon={Plus} onClick={() => setShowCreateModal(true)}>
+                        Yeni Üretim
+                    </Button>
+                </div>
             </div>
 
             {/* Stats */}
@@ -200,7 +249,7 @@ const Production: React.FC = () => {
                     {products.map((product) => (
                         <div
                             key={product.id}
-                            className="p-4 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl hover:border-[var(--border-visible)] transition-colors cursor-pointer"
+                            className="p-4 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl hover:border-[var(--border-visible)] transition-colors cursor-pointer relative group"
                             onClick={() => {
                                 setFormData({ ...formData, product_id: product.id });
                                 setShowCreateModal(true);
@@ -218,6 +267,13 @@ const Production: React.FC = () => {
                             </div>
                         </div>
                     ))}
+                    <button
+                        onClick={() => setShowProductModal(true)}
+                        className="p-4 border border-dashed border-[var(--border-subtle)] rounded-xl flex flex-col items-center justify-center text-[var(--text-secondary)] hover:text-[var(--primary-500)] hover:border-[var(--primary-500)] transition-colors"
+                    >
+                        <Plus size={24} className="mb-2" />
+                        <span className="text-sm font-medium">Ürün Ekle</span>
+                    </button>
                 </div>
             </div>
 
@@ -265,7 +321,7 @@ const Production: React.FC = () => {
                                             </span>
                                             <span className="flex items-center gap-1">
                                                 <Calendar size={12} />
-                                                {format(new Date(batch.production_date), 'd MMM', { locale: tr })}
+                                                {format(new Date(batch.start_date), 'd MMM', { locale: tr })}
                                             </span>
                                         </div>
                                     </div>
@@ -275,9 +331,9 @@ const Production: React.FC = () => {
                                         <div className="font-bold text-[var(--text-primary)]">
                                             {batch.quantity_produced} {batch.unit}
                                         </div>
-                                        {batch.expiry_date && (
+                                        {batch.expiration_date && (
                                             <div className="text-xs text-[var(--text-muted)]">
-                                                SKT: {format(new Date(batch.expiry_date), 'd MMM', { locale: tr })}
+                                                SKT: {format(new Date(batch.expiration_date), 'd MMM', { locale: tr })}
                                             </div>
                                         )}
                                     </div>
@@ -297,7 +353,7 @@ const Production: React.FC = () => {
                 </div>
             </Card>
 
-            {/* Create Modal */}
+            {/* Create Batch Modal */}
             <Modal
                 isOpen={showCreateModal}
                 onClose={() => setShowCreateModal(false)}
@@ -342,6 +398,67 @@ const Production: React.FC = () => {
                         </Button>
                         <Button variant="primary" onClick={handleCreateBatch}>
                             Üretimi Başlat
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Add Product Modal */}
+            <Modal
+                isOpen={showProductModal}
+                onClose={() => setShowProductModal(false)}
+                title="Yeni Ürün Ekle"
+                size="md"
+            >
+                <div className="space-y-4">
+                    <Input
+                        label="Ürün Adı *"
+                        placeholder="Örn: Tam Yağlı Yoğurt"
+                        value={productForm.name}
+                        onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+                    />
+                    <div className="grid grid-cols-2 gap-4">
+                        <Select
+                            label="Kategori *"
+                            options={[
+                                { value: 'yogurt', label: 'Yoğurt' },
+                                { value: 'cheese', label: 'Peynir' },
+                                { value: 'butter', label: 'Tereyağı' },
+                                { value: 'ice_cream', label: 'Dondurma' },
+                                { value: 'other', label: 'Diğer' }
+                            ]}
+                            value={productForm.category}
+                            onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
+                        />
+                        <Input
+                            label="Birim *"
+                            placeholder="kg, lt, adet"
+                            value={productForm.unit}
+                            onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })}
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <Input
+                            label="Birim Fiyat (₺) *"
+                            type="number"
+                            placeholder="0.00"
+                            value={productForm.price_per_unit}
+                            onChange={(e) => setProductForm({ ...productForm, price_per_unit: e.target.value })}
+                        />
+                        <Input
+                            label="Raf Ömrü (Gün) *"
+                            type="number"
+                            placeholder="30"
+                            value={productForm.shelf_life_days}
+                            onChange={(e) => setProductForm({ ...productForm, shelf_life_days: e.target.value })}
+                        />
+                    </div>
+                    <div className="flex justify-end gap-3 mt-6">
+                        <Button variant="secondary" onClick={() => setShowProductModal(false)}>
+                            İptal
+                        </Button>
+                        <Button variant="primary" onClick={handleAddProduct}>
+                            Kaydet
                         </Button>
                     </div>
                 </div>

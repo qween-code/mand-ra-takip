@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Card, CardHeader, StatCard, Button, Badge, cn } from '../components/ui';
-import type { DashboardStats, Animal, Sale, MilkInventory } from '../types';
+import type { DashboardStats, Sale, MilkInventory } from '../types';
 
 interface RecentSale {
     id: string;
@@ -84,17 +84,20 @@ const Dashboard: React.FC = () => {
             const todayMilk = milkData?.reduce((sum, r) => sum + (r.quantity_liters || 0), 0) || 0;
 
             // Fetch animal counts
-            const { data: animalsData } = await supabase
-                .from('animals')
-                .select('type, status');
+            const { count: activeCows } = await supabase
+                .from('cattle')
+                .select('*', { count: 'exact', head: true })
+                .eq('status', 'active');
 
-            const activeCows = animalsData?.filter(a => a.type === 'cow' && a.status === 'active').length || 0;
-            const totalCalves = animalsData?.filter(a => a.type === 'calf').length || 0;
-            const totalAnimals = animalsData?.filter(a => a.status === 'active').length || 0;
+            const { count: totalCalves } = await supabase
+                .from('calves')
+                .select('*', { count: 'exact', head: true });
+
+            const totalAnimals = (activeCows || 0) + (totalCalves || 0);
 
             // Fetch active production batches
             const { count: productionCount } = await supabase
-                .from('production_batches')
+                .from('production_batches' as any)
                 .select('*', { count: 'exact', head: true })
                 .in('status', ['planned', 'in_progress']);
 
@@ -108,11 +111,12 @@ const Dashboard: React.FC = () => {
 
             // Fetch monthly expenses
             const { data: expensesData } = await supabase
-                .from('expenses')
+                .from('financial_transactions' as any)
                 .select('amount')
+                .eq('type', 'expense')
                 .gte('date', monthStart);
 
-            const monthlyExpenses = expensesData?.reduce((sum, e) => sum + (e.amount || 0), 0) || 0;
+            const monthlyExpenses = (expensesData as any[])?.reduce((sum, e) => sum + (e.amount || 0), 0) || 0;
 
             // Fetch recent sales
             const { data: recentSalesData } = await supabase
@@ -124,8 +128,8 @@ const Dashboard: React.FC = () => {
             setStats({
                 todayMilk,
                 totalAnimals,
-                activeCows,
-                totalCalves,
+                activeCows: activeCows || 0,
+                totalCalves: totalCalves || 0,
                 activeProduction: productionCount || 0,
                 monthlyRevenue,
                 monthlyExpenses,
@@ -148,112 +152,114 @@ const Dashboard: React.FC = () => {
         );
     }
 
-    {/* Quick Actions - Top Priority */ }
-    <div className="grid grid-cols-2 gap-4 mb-8">
-        <Button
-            variant="primary"
-            className="h-32 flex-col gap-4 text-xl font-bold hover:scale-[1.02] transition-transform shadow-lg"
-            onClick={() => window.location.href = '/milk'}
-        >
-            <div className="p-4 rounded-full bg-white/20">
-                <Milk size={40} />
-            </div>
-            <span>Süt Girişi</span>
-        </Button>
-        <Button
-            variant="secondary"
-            className="h-32 flex-col gap-4 text-xl font-bold hover:bg-[var(--bg-elevated)] transition-colors shadow-md"
-            onClick={() => window.location.href = '/animals'}
-        >
-            <div className="p-4 rounded-full bg-[var(--bg-secondary)]">
-                <Beef size={40} />
-            </div>
-            <span>Hayvan Ekle</span>
-        </Button>
-        <Button
-            variant="secondary"
-            className="h-32 flex-col gap-4 text-xl font-bold hover:bg-[var(--bg-elevated)] transition-colors shadow-md"
-            onClick={() => window.location.href = '/sales'}
-        >
-            <div className="p-4 rounded-full bg-[var(--bg-secondary)]">
-                <DollarSign size={40} />
-            </div>
-            <span>Satış Yap</span>
-        </Button>
-        <Button
-            variant="secondary"
-            className="h-32 flex-col gap-4 text-xl font-bold hover:bg-[var(--bg-elevated)] transition-colors shadow-md"
-            onClick={() => window.location.href = '/financials'}
-        >
-            <div className="p-4 rounded-full bg-[var(--bg-secondary)]">
-                <TrendingUp size={40} />
-            </div>
-            <span>Gider Ekle</span>
-        </Button>
-    </div>
-
-    {/* Key Stats - Simple & Clear */ }
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <Card className="p-6 flex items-center justify-between bg-gradient-to-br from-[var(--primary-900)] to-[var(--primary-800)] text-white border-none">
-            <div>
-                <p className="text-primary-100 mb-1">Bugünkü Süt</p>
-                <h3 className="text-4xl font-bold">{stats.todayMilk.toFixed(1)} L</h3>
-            </div>
-            <div className="p-3 rounded-xl bg-white/10">
-                <Milk size={32} />
-            </div>
-        </Card>
-
-        <Card className="p-6 flex items-center justify-between bg-[var(--bg-secondary)]">
-            <div>
-                <p className="text-[var(--text-secondary)] mb-1">Aktif Hayvan</p>
-                <h3 className="text-4xl font-bold text-[var(--text-primary)]">{stats.totalAnimals}</h3>
-            </div>
-            <div className="p-3 rounded-xl bg-[var(--bg-elevated)]">
-                <Beef size={32} className="text-[var(--primary-500)]" />
-            </div>
-        </Card>
-
-        <Card className="p-6 flex items-center justify-between bg-[var(--bg-secondary)]">
-            <div>
-                <p className="text-[var(--text-secondary)] mb-1">Bu Ay Ciro</p>
-                <h3 className="text-4xl font-bold text-[var(--success)]">₺{stats.monthlyRevenue.toLocaleString('tr-TR')}</h3>
-            </div>
-            <div className="p-3 rounded-xl bg-[var(--bg-elevated)]">
-                <TrendingUp size={32} className="text-[var(--success)]" />
-            </div>
-        </Card>
-    </div>
-
-    {/* Recent Activity - Simple List */ }
-    <Card>
-        <CardHeader title="Son Hareketler" />
-        <div className="divide-y divide-[var(--border-color)]">
-            {recentSales.length === 0 ? (
-                <div className="p-8 text-center text-[var(--text-secondary)]">
-                    Henüz işlem yok
-                </div>
-            ) : (
-                recentSales.map((sale) => (
-                    <div key={sale.id} className="p-4 flex items-center justify-between hover:bg-[var(--bg-secondary)] transition-colors">
-                        <div className="flex items-center gap-4">
-                            <div className="p-2 rounded-full bg-[var(--success-bg)] text-[var(--success)]">
-                                <DollarSign size={20} />
-                            </div>
-                            <div>
-                                <p className="font-medium text-[var(--text-primary)]">Satış: {sale.customer_name || 'Müşteri'}</p>
-                                <p className="text-sm text-[var(--text-secondary)]">{format(new Date(sale.date), 'd MMMM HH:mm', { locale: tr })}</p>
-                            </div>
-                        </div>
-                        <span className="font-bold text-[var(--text-primary)]">
-                            +₺{sale.total_amount.toLocaleString('tr-TR')}
-                        </span>
+    return (
+        <div className="page-content">
+            {/* Quick Actions - Top Priority */}
+            <div className="grid grid-cols-2 gap-4 mb-8">
+                <Button
+                    variant="primary"
+                    className="h-32 flex-col gap-4 text-xl font-bold hover:scale-[1.02] transition-transform shadow-lg"
+                    onClick={() => window.location.href = '/milk'}
+                >
+                    <div className="p-4 rounded-full bg-white/20">
+                        <Milk size={40} />
                     </div>
-                ))
-            )}
+                    <span>Süt Girişi</span>
+                </Button>
+                <Button
+                    variant="secondary"
+                    className="h-32 flex-col gap-4 text-xl font-bold hover:bg-[var(--bg-elevated)] transition-colors shadow-md"
+                    onClick={() => window.location.href = '/cattle'}
+                >
+                    <div className="p-4 rounded-full bg-[var(--bg-secondary)]">
+                        <Beef size={40} />
+                    </div>
+                    <span>Hayvan Ekle</span>
+                </Button>
+                <Button
+                    variant="secondary"
+                    className="h-32 flex-col gap-4 text-xl font-bold hover:bg-[var(--bg-elevated)] transition-colors shadow-md"
+                    onClick={() => window.location.href = '/financials'}
+                >
+                    <div className="p-4 rounded-full bg-[var(--bg-secondary)]">
+                        <DollarSign size={40} />
+                    </div>
+                    <span>Satış Yap</span>
+                </Button>
+                <Button
+                    variant="secondary"
+                    className="h-32 flex-col gap-4 text-xl font-bold hover:bg-[var(--bg-elevated)] transition-colors shadow-md"
+                    onClick={() => window.location.href = '/financials'}
+                >
+                    <div className="p-4 rounded-full bg-[var(--bg-secondary)]">
+                        <TrendingUp size={40} />
+                    </div>
+                    <span>Gider Ekle</span>
+                </Button>
+            </div>
+
+            {/* Key Stats - Simple & Clear */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <Card className="p-6 flex items-center justify-between bg-gradient-to-br from-[var(--primary-900)] to-[var(--primary-800)] text-white border-none">
+                    <div>
+                        <p className="text-primary-100 mb-1">Bugünkü Süt</p>
+                        <h3 className="text-4xl font-bold">{stats.todayMilk.toFixed(1)} L</h3>
+                    </div>
+                    <div className="p-3 rounded-xl bg-white/10">
+                        <Milk size={32} />
+                    </div>
+                </Card>
+
+                <Card className="p-6 flex items-center justify-between bg-[var(--bg-secondary)]">
+                    <div>
+                        <p className="text-[var(--text-secondary)] mb-1">Aktif Hayvan</p>
+                        <h3 className="text-4xl font-bold text-[var(--text-primary)]">{stats.totalAnimals}</h3>
+                    </div>
+                    <div className="p-3 rounded-xl bg-[var(--bg-elevated)]">
+                        <Beef size={32} className="text-[var(--primary-500)]" />
+                    </div>
+                </Card>
+
+                <Card className="p-6 flex items-center justify-between bg-[var(--bg-secondary)]">
+                    <div>
+                        <p className="text-[var(--text-secondary)] mb-1">Bu Ay Ciro</p>
+                        <h3 className="text-4xl font-bold text-[var(--success)]">₺{stats.monthlyRevenue.toLocaleString('tr-TR')}</h3>
+                    </div>
+                    <div className="p-3 rounded-xl bg-[var(--bg-elevated)]">
+                        <TrendingUp size={32} className="text-[var(--success)]" />
+                    </div>
+                </Card>
+            </div>
+
+            {/* Recent Activity - Simple List */}
+            <Card>
+                <CardHeader title="Son Hareketler" />
+                <div className="divide-y divide-[var(--border-color)]">
+                    {recentSales.length === 0 ? (
+                        <div className="p-8 text-center text-[var(--text-secondary)]">
+                            Henüz işlem yok
+                        </div>
+                    ) : (
+                        recentSales.map((sale) => (
+                            <div key={sale.id} className="p-4 flex items-center justify-between hover:bg-[var(--bg-secondary)] transition-colors">
+                                <div className="flex items-center gap-4">
+                                    <div className="p-2 rounded-full bg-[var(--success-bg)] text-[var(--success)]">
+                                        <DollarSign size={20} />
+                                    </div>
+                                    <div>
+                                        <p className="font-medium text-[var(--text-primary)]">Satış: {sale.customer_name || 'Müşteri'}</p>
+                                        <p className="text-sm text-[var(--text-secondary)]">{format(new Date(sale.date), 'd MMMM HH:mm', { locale: tr })}</p>
+                                    </div>
+                                </div>
+                                <span className="font-bold text-[var(--text-primary)]">
+                                    +₺{sale.total_amount.toLocaleString('tr-TR')}
+                                </span>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </Card>
         </div>
-    </Card>
-        </div >
     );
 };
 

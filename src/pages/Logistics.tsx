@@ -28,14 +28,14 @@ interface ShipmentWithDetails extends Shipment {
 
 const statusLabels: Record<ShipmentStatus, string> = {
     preparing: 'Hazırlanıyor',
-    in_transit: 'Yolda',
+    shipped: 'Yolda',
     delivered: 'Teslim Edildi',
     cancelled: 'İptal',
 };
 
 const statusColors: Record<ShipmentStatus, 'info' | 'warning' | 'success' | 'error'> = {
     preparing: 'info',
-    in_transit: 'warning',
+    shipped: 'warning',
     delivered: 'success',
     cancelled: 'error',
 };
@@ -65,30 +65,30 @@ const Logistics: React.FC = () => {
         try {
             // Load shipments with retailer info
             const { data: shipmentData } = await supabase
-                .from('shipments')
+                .from('shipments' as any)
                 .select(`
           *,
           retailer:retailers(*, region:regions(*))
         `)
                 .order('date', { ascending: false });
 
-            setShipments(shipmentData || []);
+            setShipments((shipmentData as any[]) || []);
 
             // Load retailers
             const { data: retailerData } = await supabase
-                .from('retailers')
+                .from('retailers' as any)
                 .select('*')
                 .eq('is_active', true);
 
-            setRetailers(retailerData || []);
+            setRetailers((retailerData as any[]) || []);
 
             // Load regions
             const { data: regionData } = await supabase
-                .from('regions')
+                .from('regions' as any)
                 .select('*')
                 .eq('is_active', true);
 
-            setRegions(regionData || []);
+            setRegions((regionData as any[]) || []);
         } catch (error) {
             console.error('Error loading data:', error);
         } finally {
@@ -100,7 +100,7 @@ const Logistics: React.FC = () => {
         try {
             const shipmentNumber = `SHP-${format(new Date(), 'yyyyMMdd')}-${Date.now().toString().slice(-4)}`;
 
-            const { error } = await supabase.from('shipments').insert({
+            const { error } = await supabase.from('shipments' as any).insert({
                 shipment_number: shipmentNumber,
                 date: format(new Date(), 'yyyy-MM-dd'),
                 retailer_id: formData.retailer_id,
@@ -124,10 +124,10 @@ const Logistics: React.FC = () => {
         try {
             const updateData: Record<string, unknown> = { status: newStatus };
 
-            if (newStatus === 'in_transit') {
-                updateData.departure_time = new Date().toISOString();
+            if (newStatus === 'shipped') {
+                // updateData.departure_time = new Date().toISOString(); // Not in schema
             } else if (newStatus === 'delivered') {
-                updateData.delivery_time = new Date().toISOString();
+                // updateData.delivery_time = new Date().toISOString(); // Not in schema
             }
 
             await supabase
@@ -144,7 +144,7 @@ const Logistics: React.FC = () => {
     const stats = {
         total: shipments.length,
         preparing: shipments.filter(s => s.status === 'preparing').length,
-        inTransit: shipments.filter(s => s.status === 'in_transit').length,
+        inTransit: shipments.filter(s => s.status === 'shipped').length,
         delivered: shipments.filter(s => s.status === 'delivered').length,
     };
 
@@ -236,10 +236,10 @@ const Logistics: React.FC = () => {
                                             {retailer.name}
                                         </div>
                                         <div className="text-xs text-[var(--text-muted)] truncate">
-                                            {retailer.address || retailer.contact_name || 'Adres yok'}
+                                            {retailer.address || retailer.contact_person || 'Adres yok'}
                                         </div>
                                     </div>
-                                    <Badge variant="default">{retailer.type}</Badge>
+                                    <Badge variant="default">{retailer.status}</Badge>
                                 </div>
                             ))
                         )}
@@ -277,14 +277,14 @@ const Logistics: React.FC = () => {
                                             <div className={cn(
                                                 'w-10 h-10 rounded-lg flex items-center justify-center',
                                                 shipment.status === 'preparing' && 'bg-[var(--info-bg)]',
-                                                shipment.status === 'in_transit' && 'bg-[var(--warning-bg)]',
+                                                shipment.status === 'shipped' && 'bg-[var(--warning-bg)]',
                                                 shipment.status === 'delivered' && 'bg-[var(--success-bg)]',
                                             )}>
                                                 <Truck
                                                     size={20}
                                                     className={cn(
                                                         shipment.status === 'preparing' && 'text-[var(--info)]',
-                                                        shipment.status === 'in_transit' && 'text-[var(--warning)]',
+                                                        shipment.status === 'shipped' && 'text-[var(--warning)]',
                                                         shipment.status === 'delivered' && 'text-[var(--success)]',
                                                     )}
                                                 />
@@ -331,12 +331,12 @@ const Logistics: React.FC = () => {
                                                 variant="secondary"
                                                 size="sm"
                                                 icon={Navigation}
-                                                onClick={() => handleStatusChange(shipment.id, 'in_transit')}
+                                                onClick={() => handleStatusChange(shipment.id, 'shipped')}
                                             >
                                                 Yola Çık
                                             </Button>
                                         )}
-                                        {shipment.status === 'in_transit' && (
+                                        {shipment.status === 'shipped' && (
                                             <Button
                                                 variant="success"
                                                 size="sm"
@@ -375,7 +375,7 @@ const Logistics: React.FC = () => {
                                     <div className={cn(
                                         'w-12 h-12 rounded-xl flex items-center justify-center',
                                         shipment.status === 'preparing' && 'bg-[var(--info-bg)]',
-                                        shipment.status === 'in_transit' && 'bg-[var(--warning-bg)]',
+                                        shipment.status === 'shipped' && 'bg-[var(--warning-bg)]',
                                         shipment.status === 'delivered' && 'bg-[var(--success-bg)]',
                                         shipment.status === 'cancelled' && 'bg-[var(--error-bg)]',
                                     )}>
@@ -383,7 +383,7 @@ const Logistics: React.FC = () => {
                                             size={24}
                                             className={cn(
                                                 shipment.status === 'preparing' && 'text-[var(--info)]',
-                                                shipment.status === 'in_transit' && 'text-[var(--warning)]',
+                                                shipment.status === 'shipped' && 'text-[var(--warning)]',
                                                 shipment.status === 'delivered' && 'text-[var(--success)]',
                                                 shipment.status === 'cancelled' && 'text-[var(--error)]',
                                             )}
@@ -405,16 +405,16 @@ const Logistics: React.FC = () => {
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    {shipment.total_amount > 0 && (
+                                    {/* {shipment.total_amount > 0 && (
                                         <div className="font-bold text-[var(--text-primary)]">
                                             ₺{shipment.total_amount.toLocaleString('tr-TR')}
                                         </div>
-                                    )}
-                                    {shipment.delivery_time && (
+                                    )} */}
+                                    {/* {shipment.delivery_time && (
                                         <div className="text-xs text-[var(--text-muted)]">
                                             Teslim: {format(new Date(shipment.delivery_time), 'HH:mm')}
                                         </div>
-                                    )}
+                                    )} */}
                                 </div>
                             </div>
                         ))

@@ -12,7 +12,9 @@ import { Layout } from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import MilkEntry from './pages/MilkEntry';
-import Animals from './pages/Animals';
+import MilkInventory from './pages/MilkInventory';
+import Cattle from './pages/Cattle';
+import Calves from './pages/Calves';
 import Production from './pages/Production';
 import Financials from './pages/Financials';
 import Logistics from './pages/Logistics';
@@ -46,7 +48,9 @@ function App() {
                     <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                         <Route path="/" element={<Dashboard />} />
                         <Route path="/milk" element={<MilkEntry />} />
-                        <Route path="/animals" element={<Animals />} />
+                        <Route path="/milk-inventory" element={<MilkInventory />} />
+                        <Route path="/cattle" element={<Cattle />} />
+                        <Route path="/calves" element={<Calves />} />
                         <Route path="/production" element={<Production />} />
                         <Route path="/financials" element={<Financials />} />
                         <Route path="/logistics" element={<Logistics />} />

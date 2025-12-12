@@ -28,9 +28,8 @@ export const getTankStatus = async (date?: string) => {
 
 export const getActiveCows = async () => {
     const { data, error } = await supabase
-        .from('animals')
+        .from('cattle')
         .select('*')
-        .eq('type', 'cow')
         .eq('status', 'active')
         .order('name');
 
@@ -43,9 +42,8 @@ export const getActiveCows = async () => {
 
 export const getActiveCalves = async () => {
     const { data, error } = await supabase
-        .from('animals')
-        .select('*, mother:animals!mother_id(name)')
-        .eq('type', 'calf')
+        .from('calves')
+        .select('*, mother:cattle!mother_id(name)')
         .eq('status', 'active')
         .order('name');
 

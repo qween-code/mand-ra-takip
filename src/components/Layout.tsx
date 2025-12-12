@@ -38,7 +38,9 @@ const mainNavItems: NavItem[] = [
 
 const dailyNavItems: NavItem[] = [
     { path: '/milk', label: 'Süt Girişi', icon: Milk },
-    { path: '/animals', label: 'Hayvanlar', icon: Beef },
+    { path: '/milk-inventory', label: 'Süt Envanteri', icon: Droplets },
+    { path: '/cattle', label: 'İnekler', icon: Beef },
+    { path: '/calves', label: 'Buzağılar', icon: Users }, // Using Users icon as placeholder for Calves if Baby icon not imported, but I can import Baby
     { path: '/financials', label: 'Finans', icon: DollarSign },
 ];
 

@@ -1,9 +1,10 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // MANDIRA ASISTANI - AUTH CONTEXT
-// Simplified auth for local development (no Supabase auth required)
+// Supabase Authentication
 // ═══════════════════════════════════════════════════════════════════════════
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import type { User } from '../types';
 
 type UserRole = 'admin' | 'manager' | 'worker';
@@ -15,67 +16,62 @@ interface AuthContextType {
     isAdmin: boolean;
     isManager: boolean;
     isWorker: boolean;
-    login: (name: string, role: UserRole) => void;
-    logout: () => void;
+    login: (email: string, password: string) => Promise<{ error: any }>;
+    logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// Default user for development
-const defaultUser: User = {
-    id: 'demo-user-1',
-    email: 'admin@mandira.com',
-    name: 'Mehmet Yılmaz',
-    role: 'admin',
-    phone: '0532 111 2233',
-    created_at: new Date().toISOString(),
-    is_active: true,
-};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Auto-login with default user for development
-        const storedUser = localStorage.getItem('mandira_user');
-        if (storedUser) {
-            setUser(JSON.parse(storedUser));
-        } else {
-            // Auto-login as admin for demo
-            setUser(defaultUser);
-            localStorage.setItem('mandira_user', JSON.stringify(defaultUser));
-        }
-        setLoading(false);
+        // Check active session
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session?.user) {
+                setUser(mapSupabaseUser(session.user));
+            }
+            setLoading(false);
+        });
+
+        // Listen for changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            if (session?.user) {
+                setUser(mapSupabaseUser(session.user));
+            } else {
+                setUser(null);
+            }
+            setLoading(false);
+        });
+
+        return () => subscription.unsubscribe();
     }, []);
 
-    const login = (name: string, role: UserRole) => {
-        const newUser: User = {
-            id: `user-${Date.now()}`,
-            email: `${name.toLowerCase().replace(' ', '.')}@mandira.com`,
-            name,
-            role,
-            phone: null,
-            created_at: new Date().toISOString(),
-            is_active: true,
+    const mapSupabaseUser = (u: any): User => {
+        return {
+            id: u.id,
+            email: u.email || '',
+            name: u.user_metadata?.name || u.email?.split('@')[0] || 'User',
+            role: u.user_metadata?.role || 'worker',
+            phone: u.phone || null,
+            created_at: u.created_at,
+            is_active: true
         };
-        setUser(newUser);
-        localStorage.setItem('mandira_user', JSON.stringify(newUser));
     };
 
-    const logout = () => {
-        setUser(null);
-        localStorage.removeItem('mandira_user');
-        // Re-login as admin for demo purposes
-        setTimeout(() => {
-            setUser(defaultUser);
-            localStorage.setItem('mandira_user', JSON.stringify(defaultUser));
-        }, 100);
+    const login = async (email: string, password: string) => {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        return { error };
+    };
+
+    const logout = async () => {
+        await supabase.auth.signOut();
     };
 
     const value: AuthContextType = {
         user,
-        role: user?.role || 'worker',
+        role: (user?.role as UserRole) || 'worker',
         loading,
         isAdmin: user?.role === 'admin',
         isManager: user?.role === 'manager',
