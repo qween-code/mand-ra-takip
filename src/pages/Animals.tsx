@@ -28,9 +28,19 @@ import { supabase } from '../lib/supabase';
 import { Card, CardHeader, Button, Badge, Input, Select, Modal, Table, cn } from '../components/ui';
 import type { Animal, HealthRecord, AnimalType, AnimalStatus } from '../types';
 
-interface AnimalWithDetails extends Animal {
+interface AnimalWithDetails {
+    id: string;
+    ear_tag: string;
+    name: string | null;
+    type: AnimalType;
+    gender: 'male' | 'female';
+    birth_date: string | null;
+    breed: string | null;
+    status: AnimalStatus;
+    weight_kg: number | null;
+    notes: string | null;
     mother?: { name: string } | null;
-    health_records?: HealthRecord[];
+    health_records?: any[];
 }
 
 const statusLabels: Record<AnimalStatus, string> = {
@@ -87,7 +97,7 @@ const Animals: React.FC = () => {
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
-            setAnimals(data || []);
+            setAnimals((data as AnimalWithDetails[]) || []);
         } catch (error) {
             console.error('Error loading animals:', error);
         } finally {
@@ -145,7 +155,7 @@ const Animals: React.FC = () => {
             .eq('animal_id', animal.id)
             .order('date', { ascending: false });
 
-        setSelectedAnimal({ ...animal, health_records: healthRecords || [] });
+        setSelectedAnimal({ ...animal, health_records: (healthRecords as any[]) || [] });
         setShowDetailModal(true);
     };
 
@@ -183,7 +193,8 @@ const Animals: React.FC = () => {
                     <h1 className="text-2xl font-bold text-[var(--text-primary)]">Hayvanlar</h1>
                     <p className="text-[var(--text-secondary)] mt-1">Tüm hayvanlarınızı yönetin</p>
                 </div>
-                <Button variant="primary" icon={Plus} onClick={() => setShowAddModal(true)}>
+                <Button variant="primary" onClick={() => setShowAddModal(true)}>
+                    <Plus size={16} className="mr-2" />
                     Hayvan Ekle
                 </Button>
             </div>

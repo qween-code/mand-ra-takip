@@ -5,7 +5,7 @@
 import React from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { LucideIcon } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 // Utility function for merging classes
 export function cn(...inputs: (string | undefined | null | false)[]) {
@@ -244,6 +244,28 @@ export const Badge: React.FC<BadgeProps> = ({ children, variant = 'default', dot
             {children}
         </span>
     );
+};
+
+// StatusBadge - pre-configured status badges
+export const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
+    const statusConfig: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'info' | 'default' }> = {
+        active: { label: 'Aktif', variant: 'success' },
+        sold: { label: 'Satıldı', variant: 'info' },
+        deceased: { label: 'Vefat', variant: 'error' },
+        sick: { label: 'Hasta', variant: 'warning' },
+        pending: { label: 'Beklemede', variant: 'warning' },
+        completed: { label: 'Tamamlandı', variant: 'success' },
+        in_progress: { label: 'Devam Ediyor', variant: 'info' },
+        planned: { label: 'Planlandı', variant: 'default' },
+        failed: { label: 'Başarısız', variant: 'error' },
+        paid: { label: 'Ödendi', variant: 'success' },
+        partial: { label: 'Kısmi', variant: 'warning' },
+        delivered: { label: 'Teslim Edildi', variant: 'success' },
+        in_transit: { label: 'Yolda', variant: 'info' },
+        cancelled: { label: 'İptal', variant: 'error' },
+    };
+    const config = statusConfig[status] || { label: status, variant: 'default' as const };
+    return <Badge variant={config.variant} dot>{config.label}</Badge>;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
