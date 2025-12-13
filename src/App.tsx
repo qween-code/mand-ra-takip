@@ -15,11 +15,14 @@ import MilkEntry from './pages/MilkEntry';
 import MilkInventory from './pages/MilkInventory';
 import Cattle from './pages/Cattle';
 import Calves from './pages/Calves';
+import Animals from './pages/Animals';
 import Production from './pages/Production';
 import Financials from './pages/Financials';
+import MilkTracking from './pages/MilkTracking';
 import Logistics from './pages/Logistics';
 import Suppliers from './pages/Suppliers';
 import SystemStatus from './pages/SystemStatus';
+import Breeding from './pages/Breeding';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { user, loading } = useAuth();
@@ -48,9 +51,12 @@ function App() {
                     <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                         <Route path="/" element={<Dashboard />} />
                         <Route path="/milk" element={<MilkEntry />} />
+                        <Route path="/milk-tracking" element={<MilkTracking />} />
                         <Route path="/milk-inventory" element={<MilkInventory />} />
+                        <Route path="/animals" element={<Animals />} />
                         <Route path="/cattle" element={<Cattle />} />
                         <Route path="/calves" element={<Calves />} />
+                        <Route path="/breeding" element={<Breeding />} />
                         <Route path="/production" element={<Production />} />
                         <Route path="/financials" element={<Financials />} />
                         <Route path="/logistics" element={<Logistics />} />
