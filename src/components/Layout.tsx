@@ -13,6 +13,7 @@ import {
     Truck,
     TrendingUp,
     BarChart3,
+    Activity,
     Settings,
     Bell,
     ShoppingCart,
@@ -20,7 +21,8 @@ import {
     Undo2,
     Droplets,
     LogOut,
-    DollarSign
+    DollarSign,
+    Tag
 } from 'lucide-react';
 import { cn } from './ui';
 import { useAuth } from '../context/AuthContext';
@@ -38,21 +40,25 @@ const mainNavItems: NavItem[] = [
 
 const dailyNavItems: NavItem[] = [
     { path: '/milk', label: 'Süt Girişi', icon: Milk },
+    { path: '/milk-tracking', label: 'Süt Takibi', icon: TrendingUp },
     { path: '/milk-inventory', label: 'Süt Envanteri', icon: Droplets },
     { path: '/cattle', label: 'İnekler', icon: Beef },
-    { path: '/calves', label: 'Buzağılar', icon: Users }, // Using Users icon as placeholder for Calves if Baby icon not imported, but I can import Baby
+    { path: '/calves', label: 'Buzağılar', icon: Users }, // Placeholder icon; swap with Baby if available
     { path: '/financials', label: 'Finans', icon: DollarSign },
 ];
 
 const managementNavItems: NavItem[] = [
+    { path: '/animals', label: 'Hayvanlar', icon: Tag },
+    { path: '/breeding', label: 'Damızlık Yönetimi', icon: Activity, adminOnly: true },
     { path: '/production', label: 'Üretim', icon: Factory, adminOnly: true },
     { path: '/suppliers', label: 'Tedarikçiler', icon: Users, adminOnly: true },
-    { path: '/distribution', label: 'Lojistik', icon: Truck, adminOnly: true },
+    { path: '/logistics', label: 'Lojistik', icon: Truck, adminOnly: true },
     { path: '/returns', label: 'İadeler', icon: Undo2, adminOnly: true },
 ];
 
 const reportNavItems: NavItem[] = [
     { path: '/analytics', label: 'Raporlar', icon: BarChart3, adminOnly: true },
+    { path: '/system-status', label: 'Sistem Durumu', icon: Activity, adminOnly: true },
 ];
 
 const SidebarLink: React.FC<{ item: NavItem }> = ({ item }) => {
